@@ -10,9 +10,9 @@ export class AudioManager {
   async init() {
     if (this.initialized) return;
 
-    // Dynamically import Tone.js
-    const Tone = await import('https://unpkg.com/tone@14.7.77/build/Tone.js');
-    this.Tone = Tone.default || Tone;
+    // Dynamically import Tone.js (uses import map)
+    const Tone = await import('tone');
+    this.Tone = Tone;
 
     // Create synths
     this.synth = new this.Tone.PolySynth(this.Tone.Synth, {
@@ -39,6 +39,9 @@ export class AudioManager {
     }).toDestination();
 
     this.noiseSynth.volume.value = -18;
+
+    // Start audio context (requires user gesture)
+    await this.Tone.start();
 
     this.initialized = true;
   }

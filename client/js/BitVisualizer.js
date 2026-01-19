@@ -27,6 +27,9 @@ const RotationSpeeds = {
   ending: 0.5
 };
 
+// Multiplier for rotation after session has done work
+const WORKED_ROTATION_MULTIPLIER = 2.0;
+
 // Shader for Tron glow effect
 const bitVertexShader = `
   varying vec3 vNormal;
@@ -174,6 +177,9 @@ export class BitVisualizer {
     this.targetState = States.NEUTRAL;
     this.scale = isSubagent ? 0.4 : 1.0;
 
+    // Track if session has done work (entered THINKING state)
+    this.hasWorked = false;
+
     // Morphing state
     this.morphProgress = 1;
     this.morphSpeed = 3;
@@ -244,6 +250,11 @@ export class BitVisualizer {
     }
 
     if (newState === this.state && this.morphProgress >= 1) return;
+
+    // Track if session has done work
+    if (newState === States.THINKING) {
+      this.hasWorked = true;
+    }
 
     this.targetState = newState;
     this.sourceColor = this.getCurrentColor().clone();
@@ -353,8 +364,11 @@ export class BitVisualizer {
     // Update morphing
     this.updateMorph(delta);
 
-    // Rotation based on state
-    const rotSpeed = RotationSpeeds[this.state] || 1.0;
+    // Rotation based on state (faster if session has worked)
+    let rotSpeed = RotationSpeeds[this.state] || 1.0;
+    if (this.hasWorked && this.state !== States.THINKING) {
+      rotSpeed *= WORKED_ROTATION_MULTIPLIER;
+    }
     this.group.rotation.y += delta * rotSpeed;
     this.group.rotation.x = Math.sin(elapsed * 0.3) * 0.1;
 

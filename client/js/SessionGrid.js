@@ -16,6 +16,10 @@ export class SessionGrid {
 
     this.clock = new THREE.Clock();
 
+    // Camera smoothing
+    this.targetCameraZ = 6;
+    this.cameraLerpSpeed = 2.0;
+
     // Handle resize
     window.addEventListener('resize', () => this.onResize());
   }
@@ -162,28 +166,21 @@ export class SessionGrid {
     const count = this.sessions.size;
     if (count === 0) return;
 
-    const cols = Math.ceil(Math.sqrt(count));
-    const rows = Math.ceil(count / cols);
-
+    // Arrange all bits in a horizontal line (same z position)
     let i = 0;
     for (const session of this.sessions.values()) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-
-      const x = (col - (cols - 1) / 2) * this.spacing;
-      const z = (row - (rows - 1) / 2) * this.spacing;
+      const x = (i - (count - 1) / 2) * this.spacing;
 
       session.bit.group.position.x = x;
-      session.bit.group.position.z = z;
+      session.bit.group.position.z = 0;
       session.bit.group.userData.baseY = 0;
 
       i++;
     }
 
     // Adjust camera distance based on session count
-    const maxDim = Math.max(cols, rows);
-    const targetZ = 4 + maxDim * 2;
-    this.camera.position.z = targetZ;
+    const width = (count - 1) * this.spacing;
+    this.targetCameraZ = Math.max(6, 4 + width * 0.5);
   }
 
   updateSubagentPositions(parentId) {
@@ -251,11 +248,29 @@ export class SessionGrid {
 
     // Create from tree structure
     for (const session of sessions) {
-      this.createSession(session.id);
+      const bit = this.createSession(session.id);
+
+      // Apply state from server
+      if (session.state) {
+        if (session.state !== 'neutral' && session.state !== 'ending') {
+          bit.hasWorked = true;  // Assume worked if not neutral
+        }
+        if (session.state !== 'neutral') {
+          bit.setState(session.state);
+        }
+      }
 
       if (session.subagents) {
         for (const subagent of session.subagents) {
-          this.createSession(subagent.id, session.id);
+          const subBit = this.createSession(subagent.id, session.id);
+          if (subagent.state) {
+            if (subagent.state !== 'neutral' && subagent.state !== 'ending') {
+              subBit.hasWorked = true;
+            }
+            if (subagent.state !== 'neutral') {
+              subBit.setState(subagent.state);
+            }
+          }
         }
       }
     }
@@ -272,6 +287,12 @@ export class SessionGrid {
   update() {
     const delta = this.clock.getDelta();
     const elapsed = this.clock.getElapsedTime();
+
+    // Smoothly interpolate camera position
+    const cameraDiff = this.targetCameraZ - this.camera.position.z;
+    if (Math.abs(cameraDiff) > 0.01) {
+      this.camera.position.z += cameraDiff * Math.min(1, delta * this.cameraLerpSpeed);
+    }
 
     // Update all Bits
     for (const session of this.sessions.values()) {

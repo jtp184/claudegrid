@@ -11,7 +11,9 @@ const HOOK_EVENTS = [
   'PostToolUse',
   'Stop',
   'SubagentStop',
-  'SessionEnd'
+  'SessionEnd',
+  'Notification',
+  'PermissionRequest'
 ];
 
 function getClaudeConfigPath() {

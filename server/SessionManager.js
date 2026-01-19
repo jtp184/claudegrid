@@ -34,6 +34,7 @@ class SessionManager {
       case 'UserPromptSubmit':
         if (session) {
           session.state = States.THINKING;
+          session.permissionBlocking = false;
           session.lastActivity = Date.now();
           stateChange = { type: 'state', state: States.THINKING };
         }
@@ -51,13 +52,22 @@ class SessionManager {
         if (session) {
           session.lastActivity = Date.now();
           const success = !event.tool_use_blocked;
-          session.state = success ? States.YES : States.NO;
-          stateChange = {
-            type: 'state',
-            state: session.state,
-            autoRevert: success ? States.THINKING : null,
-            revertDelay: success ? 1500 : null
-          };
+
+          // Don't allow YES state if permission blocking is active
+          if (session.permissionBlocking && success) {
+            stateChange = { type: 'pulse' };  // Acknowledge but stay in NO
+          } else {
+            session.state = success ? States.YES : States.NO;
+            if (!success) {
+              session.permissionBlocking = true;  // Blocked tool also sets blocking
+            }
+            stateChange = {
+              type: 'state',
+              state: session.state,
+              autoRevert: success ? States.THINKING : null,
+              revertDelay: success ? 1500 : null
+            };
+          }
         }
         break;
 
@@ -65,6 +75,7 @@ class SessionManager {
       case 'SubagentStop':
         if (session) {
           session.state = States.NEUTRAL;
+          session.permissionBlocking = false;
           session.lastActivity = Date.now();
           stateChange = { type: 'state', state: States.NEUTRAL };
         }
@@ -73,9 +84,28 @@ class SessionManager {
       case 'SessionEnd':
         if (session) {
           session.state = States.ENDING;
+          session.permissionBlocking = false;
           stateChange = { type: 'end', state: States.ENDING };
           // Remove session after animation
           setTimeout(() => this.removeSession(session_id), 2000);
+        }
+        break;
+
+      case 'Notification':
+        if (session) {
+          session.state = States.NO;
+          session.permissionBlocking = true;
+          session.lastActivity = Date.now();
+          stateChange = { type: 'state', state: States.NO };
+        }
+        break;
+
+      case 'PermissionRequest':
+        if (session) {
+          session.state = States.NO;
+          session.permissionBlocking = true;
+          session.lastActivity = Date.now();
+          stateChange = { type: 'state', state: States.NO };
         }
         break;
 
@@ -94,6 +124,7 @@ class SessionManager {
       id: session_id,
       parent_id: parent_session_id,
       state: States.NEUTRAL,
+      permissionBlocking: false,
       createdAt: Date.now(),
       lastActivity: Date.now()
     };

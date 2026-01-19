@@ -8,7 +8,14 @@
   },
   "scripts": {
     "start": "node bin/claudegrid.js",
-    "install-hooks": "node hooks/install.js"
+    "install-hooks": "node hooks/install.js",
+    "daemon:install": "sudo bash systemd/install.sh",
+    "daemon:uninstall": "sudo bash systemd/uninstall.sh",
+    "daemon:status": "systemctl status claudegrid",
+    "daemon:start": "sudo systemctl start claudegrid",
+    "daemon:stop": "sudo systemctl stop claudegrid",
+    "daemon:restart": "sudo systemctl restart claudegrid",
+    "daemon:logs": "journalctl -u claudegrid -f"
   },
   "keywords": [
     "claude",
