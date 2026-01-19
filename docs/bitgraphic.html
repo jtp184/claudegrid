@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bit - Tron (1982)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+        canvas { display: block; }
+        #ui {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+        }
+        .btn {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-family: 'Courier New', monospace;
+            border: 2px solid;
+            background: transparent;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+        }
+        .btn-yes {
+            color: #ffdd44;
+            border-color: #ffdd44;
+        }
+        .btn-yes:hover {
+            background: #ffdd4433;
+            box-shadow: 0 0 20px #ffdd44;
+        }
+        .btn-neutral {
+            color: #44ddff;
+            border-color: #44ddff;
+        }
+        .btn-neutral:hover {
+            background: #44ddff33;
+            box-shadow: 0 0 20px #44ddff;
+        }
+        .btn-no {
+            color: #ff4422;
+            border-color: #ff4422;
+        }
+        .btn-no:hover {
+            background: #ff442233;
+            box-shadow: 0 0 20px #ff4422;
+        }
+        #state-label {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #44ddff;
+            font-size: 24px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+        #instructions {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #446688;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="state-label">NEUTRAL</div>
+    <div id="instructions">Press 1 (Yes) | 2 (Neutral) | 3 (No) or use buttons</div>
+    <div id="ui">
+        <button class="btn btn-yes" onclick="setState('yes')">Yes</button>
+        <button class="btn btn-neutral" onclick="setState('neutral')">Neutral</button>
+        <button class="btn btn-no" onclick="setState('no')">No</button>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        document.body.appendChild(renderer.domElement);
+
+        // Post-processing for bloom/glow
+        const composer = new EffectComposer(renderer);
+        const renderPass = new RenderPass(scene, camera);
+        composer.addPass(renderPass);
+
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.5,  // strength
+            0.4,  // radius
+            0.85  // threshold
+        );
+        composer.addPass(bloomPass);
+
+        // Colors
+        const colors = {
+            neutral: new THREE.Color(0x44ddff),
+            yes: new THREE.Color(0xffdd44),
+            no: new THREE.Color(0xff4422)
+        };
+
+        // State
+        let currentState = 'neutral';
+        let targetState = 'neutral';
+        let morphProgress = 1;
+        const morphSpeed = 3;
+
+        // Create geometries for each state
+        function createIcosahedronVertices(radius) {
+            const t = (1 + Math.sqrt(5)) / 2;
+            const vertices = [];
+
+            // 12 vertices of icosahedron
+            const baseVerts = [
+                [-1,  t,  0], [ 1,  t,  0], [-1, -t,  0], [ 1, -t,  0],
+                [ 0, -1,  t], [ 0,  1,  t], [ 0, -1, -t], [ 0,  1, -t],
+                [ t,  0, -1], [ t,  0,  1], [-t,  0, -1], [-t,  0,  1]
+            ];
+
+            for (const v of baseVerts) {
+                const len = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+                vertices.push(new THREE.Vector3(
+                    v[0] / len * radius,
+                    v[1] / len * radius,
+                    v[2] / len * radius
+                ));
+            }
+            return vertices;
+        }
+
+        function createStarburstVertices(radius) {
+            const vertices = [];
+            const icoVerts = createIcosahedronVertices(radius * 0.6);
+
+            // Add icosahedron base vertices
+            vertices.push(...icoVerts);
+
+            // Add spike vertices (extended from each face center)
+            const faces = [
+                [0,11,5], [0,5,1], [0,1,7], [0,7,10], [0,10,11],
+                [1,5,9], [5,11,4], [11,10,2], [10,7,6], [7,1,8],
+                [3,9,4], [3,4,2], [3,2,6], [3,6,8], [3,8,9],
+                [4,9,5], [2,4,11], [6,2,10], [8,6,7], [9,8,1]
+            ];
+
+            for (const face of faces) {
+                const center = new THREE.Vector3();
+                for (const idx of face) {
+                    center.add(icoVerts[idx]);
+                }
+                center.divideScalar(3);
+                center.normalize().multiplyScalar(radius * 1.8);
+                vertices.push(center);
+            }
+
+            return vertices;
+        }
+
+        function createBlockyVertices(radius) {
+            const vertices = [];
+
+            // Irregular blocky shape - distorted cube with extra vertices
+            const baseSize = radius * 0.8;
+            const offsets = [
+                [-1.2, -1, -1], [1, -1.1, -1], [-1, 1.2, -1], [1.1, 1, -1],
+                [-1.1, -1, 1.2], [1, -1, 1], [-1, 1, 1.1], [1.2, 1.1, 1],
+                [0, -1.3, 0], [0, 1.4, 0], [-1.4, 0, 0], [1.3, 0, 0],
+                [0, 0, -1.3], [0, 0, 1.4], [-0.8, -0.8, -0.8], [0.9, 0.7, 0.8],
+                [-0.7, 0.9, 0.8], [0.8, -0.9, -0.7], [-0.6, -0.7, 0.9], [0.7, 0.8, -0.9]
+            ];
+
+            for (const [x, y, z] of offsets) {
+                vertices.push(new THREE.Vector3(
+                    x * baseSize * (0.8 + Math.random() * 0.4),
+                    y * baseSize * (0.8 + Math.random() * 0.4),
+                    z * baseSize * (0.8 + Math.random() * 0.4)
+                ));
+            }
+
+            return vertices;
+        }
+
+        // Create Bit mesh
+        const bitGroup = new THREE.Group();
+        scene.add(bitGroup);
+
+        // Custom shader material for the Tron glow effect
+        const bitMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uColor: { value: colors.neutral.clone() },
+                uTime: { value: 0 },
+                uOpacity: { value: 0.3 }
+            },
+            vertexShader: `
+                varying vec3 vNormal;
+                varying vec3 vPosition;
+
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    vPosition = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 uColor;
+                uniform float uTime;
+                uniform float uOpacity;
+
+                varying vec3 vNormal;
+                varying vec3 vPosition;
+
+                void main() {
+                    // Fresnel effect for edge glow
+                    vec3 viewDir = normalize(cameraPosition - vPosition);
+                    float fresnel = 1.0 - abs(dot(viewDir, vNormal));
+                    fresnel = pow(fresnel, 2.0);
+
+                    // Pulsing glow
+                    float pulse = 0.8 + 0.2 * sin(uTime * 3.0);
+
+                    vec3 color = uColor * (0.5 + fresnel * 1.5) * pulse;
+                    float alpha = uOpacity + fresnel * 0.7;
+
+                    gl_FragColor = vec4(color, alpha);
+                }
+            `,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+
+        // Edge material for bright wireframe
+        const edgeMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uColor: { value: colors.neutral.clone() },
+                uTime: { value: 0 }
+            },
+            vertexShader: `
+                void main() {
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 uColor;
+                uniform float uTime;
+
+                void main() {
+                    float pulse = 0.9 + 0.1 * sin(uTime * 4.0);
+                    gl_FragColor = vec4(uColor * 2.0 * pulse, 1.0);
+                }
+            `
+        });
+
+        // Geometry creation
+        let currentGeometry, currentEdges;
+        const geometryCache = {};
+
+        function createBitGeometry(state) {
+            if (geometryCache[state]) return geometryCache[state];
+
+            let geometry;
+
+            switch(state) {
+                case 'neutral':
+                    geometry = new THREE.IcosahedronGeometry(1, 0);
+                    break;
+                case 'yes':
+                    geometry = createOctahedronGeometry(1);
+                    break;
+                case 'no':
+                    geometry = createStarburstGeometry(1);
+                    break;
+            }
+
+            geometryCache[state] = geometry;
+            return geometry;
+        }
+
+        function createStarburstGeometry(radius) {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const indices = [];
+
+            // Inner icosahedron - larger core for softer, more rounded appearance
+            const innerGeo = new THREE.IcosahedronGeometry(radius * 0.5, 0).toNonIndexed();
+            const innerPos = innerGeo.attributes.position.array;
+
+            // Build unique vertices and face indices from non-indexed geometry
+            const uniqueVerts = [];
+            const vertexMap = new Map();
+            const faceIndices = [];
+
+            for (let i = 0; i < innerPos.length; i += 3) {
+                const key = `${innerPos[i].toFixed(6)},${innerPos[i+1].toFixed(6)},${innerPos[i+2].toFixed(6)}`;
+                if (!vertexMap.has(key)) {
+                    vertexMap.set(key, uniqueVerts.length / 3);
+                    uniqueVerts.push(innerPos[i], innerPos[i+1], innerPos[i+2]);
+                }
+                faceIndices.push(vertexMap.get(key));
+            }
+
+            // Copy unique inner vertices
+            for (let i = 0; i < uniqueVerts.length; i++) {
+                vertices.push(uniqueVerts[i]);
+            }
+
+            // Process faces (every 3 indices form a triangle)
+            for (let i = 0; i < faceIndices.length; i += 3) {
+                const i0 = faceIndices[i];
+                const i1 = faceIndices[i + 1];
+                const i2 = faceIndices[i + 2];
+
+                // Face center
+                const cx = (uniqueVerts[i0*3] + uniqueVerts[i1*3] + uniqueVerts[i2*3]) / 3;
+                const cy = (uniqueVerts[i0*3+1] + uniqueVerts[i1*3+1] + uniqueVerts[i2*3+1]) / 3;
+                const cz = (uniqueVerts[i0*3+2] + uniqueVerts[i1*3+2] + uniqueVerts[i2*3+2]) / 3;
+
+                // Extend spike outward - shorter spikes for softer look
+                const len = Math.sqrt(cx*cx + cy*cy + cz*cz);
+                const spikeLen = radius * 1.85;
+                const sx = cx / len * spikeLen;
+                const sy = cy / len * spikeLen;
+                const sz = cz / len * spikeLen;
+
+                const spikeIdx = vertices.length / 3;
+                vertices.push(sx, sy, sz);
+
+                // Create spike triangles
+                indices.push(i0, i1, spikeIdx);
+                indices.push(i1, i2, spikeIdx);
+                indices.push(i2, i0, spikeIdx);
+            }
+
+            // Add inner faces
+            for (let i = 0; i < faceIndices.length; i++) {
+                indices.push(faceIndices[i]);
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
+
+            return geometry;
+        }
+
+        function createOctahedronGeometry(radius) {
+            // Perfect octahedron for "No" state
+            return new THREE.OctahedronGeometry(radius * 1.2, 0);
+        }
+
+        // Create meshes
+        let bitMesh, bitEdges;
+
+        function initBit() {
+            const geometry = createBitGeometry('neutral');
+
+            bitMesh = new THREE.Mesh(geometry.clone(), bitMaterial);
+            bitGroup.add(bitMesh);
+
+            const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
+            bitEdges = new THREE.LineSegments(edgesGeo, edgeMaterial);
+            bitGroup.add(bitEdges);
+        }
+
+        initBit();
+
+        // Morphing system
+        let sourcePositions = null;
+        let targetPositions = null;
+        let sourceColor = null;
+        let targetColor = null;
+        let useScaleTransition = false;
+        let geometrySwapped = false;
+        let pendingGeometry = null;
+
+        function updateColors(state) {
+            const color = colors[state];
+            bitMaterial.uniforms.uColor.value.copy(color);
+            edgeMaterial.uniforms.uColor.value.copy(color);
+
+            // Update UI label color
+            const label = document.getElementById('state-label');
+            if (label) {
+                label.style.color = `#${color.getHexString()}`;
+            }
+        }
+
+        function startMorph(newState) {
+            if (newState === currentState && morphProgress >= 1) return;
+
+            targetState = newState;
+            sourceColor = colors[currentState].clone();
+            targetColor = colors[newState].clone();
+
+            // Store current positions
+            const currentPos = bitMesh.geometry.attributes.position;
+            sourcePositions = new Float32Array(currentPos.array);
+
+            // Get target geometry positions
+            const targetGeo = createBitGeometry(newState);
+            targetPositions = new Float32Array(targetGeo.attributes.position.array);
+
+            // Check if vertex counts differ - use scale transition
+            if (sourcePositions.length !== targetPositions.length) {
+                useScaleTransition = true;
+                geometrySwapped = false;
+                pendingGeometry = targetGeo;
+            } else {
+                useScaleTransition = false;
+            }
+
+            morphProgress = 0;
+        }
+
+        function updateMorph(delta) {
+            if (morphProgress >= 1) return;
+
+            morphProgress += delta * morphSpeed;
+            if (morphProgress > 1) morphProgress = 1;
+
+            // Smooth easing
+            const t = morphProgress < 0.5
+                ? 4 * morphProgress * morphProgress * morphProgress
+                : 1 - Math.pow(-2 * morphProgress + 2, 3) / 2;
+
+            if (useScaleTransition) {
+                // Scale transition: shrink to 0, swap geometry, grow back
+                let scale;
+                if (morphProgress < 0.5) {
+                    // Shrinking phase
+                    scale = 1 - (t * 2);
+                } else {
+                    // Swap geometry at midpoint
+                    if (!geometrySwapped) {
+                        geometrySwapped = true;
+                        bitGroup.remove(bitMesh);
+                        bitGroup.remove(bitEdges);
+
+                        const geometry = pendingGeometry.clone();
+                        bitMesh = new THREE.Mesh(geometry, bitMaterial);
+                        bitGroup.add(bitMesh);
+
+                        const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
+                        bitEdges = new THREE.LineSegments(edgesGeo, edgeMaterial);
+                        bitGroup.add(bitEdges);
+                    }
+                    // Growing phase
+                    scale = (t - 0.5) * 2;
+                }
+                bitGroup.scale.setScalar(Math.max(0.01, scale));
+            } else {
+                // Vertex morph transition
+                if (sourcePositions && targetPositions) {
+                    const pos = bitMesh.geometry.attributes.position;
+                    for (let i = 0; i < pos.array.length; i++) {
+                        pos.array[i] = sourcePositions[i] + (targetPositions[i] - sourcePositions[i]) * t;
+                    }
+                    pos.needsUpdate = true;
+                    bitMesh.geometry.computeVertexNormals();
+
+                    // Update edges
+                    bitGroup.remove(bitEdges);
+                    const edgesGeo = new THREE.EdgesGeometry(bitMesh.geometry, 15);
+                    bitEdges = new THREE.LineSegments(edgesGeo, edgeMaterial);
+                    bitGroup.add(bitEdges);
+                }
+            }
+
+            // Interpolate colors
+            if (sourceColor && targetColor) {
+                const lerpedColor = sourceColor.clone().lerp(targetColor, t);
+                bitMaterial.uniforms.uColor.value.copy(lerpedColor);
+                edgeMaterial.uniforms.uColor.value.copy(lerpedColor);
+
+                // Update UI label color
+                const label = document.getElementById('state-label');
+                if (label) {
+                    label.style.color = `#${lerpedColor.getHexString()}`;
+                }
+            }
+
+            if (morphProgress >= 1) {
+                currentState = targetState;
+                updateColors(targetState);
+                if (useScaleTransition) {
+                    bitGroup.scale.setScalar(1);
+                }
+            }
+        }
+
+        // Camera position
+        camera.position.z = 4;
+
+        // Animation
+        const clock = new THREE.Clock();
+        let bobOffset = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const elapsed = clock.getElapsedTime();
+
+            // Update shader uniforms
+            bitMaterial.uniforms.uTime.value = elapsed;
+            edgeMaterial.uniforms.uTime.value = elapsed;
+
+            // Update morph
+            updateMorph(delta);
+
+            // Rotation
+            bitGroup.rotation.y += delta * 0.5;
+            bitGroup.rotation.x = Math.sin(elapsed * 0.3) * 0.1;
+
+            // Bobbing motion
+            bobOffset = Math.sin(elapsed * 2) * 0.1;
+            bitGroup.position.y = bobOffset;
+
+            // Scale pulse when morphing (only for vertex morph, not scale transition)
+            if (morphProgress < 1 && !useScaleTransition) {
+                const pulse = 1 + Math.sin(morphProgress * Math.PI) * 0.2;
+                bitGroup.scale.setScalar(pulse);
+            } else if (morphProgress >= 1) {
+                bitGroup.scale.setScalar(1);
+            }
+
+            composer.render();
+        }
+
+        animate();
+
+        // State control
+        window.setState = function(state) {
+            startMorph(state);
+
+            // Update UI text (color is handled by updateMorph for smooth transition)
+            const label = document.getElementById('state-label');
+            label.textContent = state.toUpperCase();
+        };
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case '1': setState('yes'); break;
+                case '2': setState('neutral'); break;
+                case '3': setState('no'); break;
+            }
+        });
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Background grid effect
+        const gridHelper = new THREE.GridHelper(20, 40, 0x004466, 0x002233);
+        gridHelper.position.y = -3;
+        scene.add(gridHelper);
+
+        // Ambient particles for atmosphere
+        const particleCount = 100;
+        const particlesGeo = new THREE.BufferGeometry();
+        const particlePos = new Float32Array(particleCount * 3);
+
+        for (let i = 0; i < particleCount * 3; i += 3) {
+            particlePos[i] = (Math.random() - 0.5) * 20;
+            particlePos[i + 1] = (Math.random() - 0.5) * 20;
+            particlePos[i + 2] = (Math.random() - 0.5) * 20;
+        }
+
+        particlesGeo.setAttribute('position', new THREE.Float32BufferAttribute(particlePos, 3));
+        const particleMat = new THREE.PointsMaterial({
+            color: 0x446688,
+            size: 0.02,
+            transparent: true,
+            opacity: 0.6
+        });
+        const particles = new THREE.Points(particlesGeo, particleMat);
+        scene.add(particles);
+    </script>
+</body>
+</html>

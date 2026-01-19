@@ -1,0 +1,26 @@
+{
+  "name": "claudegrid",
+  "version": "1.0.0",
+  "description": "Real-time visualizer for Claude Code session activity using Tron's Bit character",
+  "main": "server/index.js",
+  "bin": {
+    "claudegrid": "./bin/claudegrid.js"
+  },
+  "scripts": {
+    "start": "node bin/claudegrid.js",
+    "install-hooks": "node hooks/install.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "visualizer",
+    "three.js",
+    "websocket"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0"
+  }
+}

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClaudeGrid - Session Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="header">
+        <h1>CLAUDEGRID</h1>
+        <div id="status">
+            <span id="connection-status" class="disconnected">DISCONNECTED</span>
+            <span id="session-count">0 SESSIONS</span>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <canvas id="canvas"></canvas>
+        <div id="event-log">
+            <div id="log-header">EVENT LOG</div>
+            <div id="log-entries"></div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="sound-toggle" class="btn">SOUND: OFF</button>
+        <button id="clear-log" class="btn">CLEAR LOG</button>
+    </div>
+
+    <div id="empty-state">
+        <div class="empty-message">
+            <div class="empty-icon">&#9678;</div>
+            <div>Waiting for Claude Code sessions...</div>
+            <div class="empty-hint">Start a Claude Code session to see activity</div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+            "tone": "https://unpkg.com/tone@14.7.77/build/Tone.js"
+        }
+    }
+    </script>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
