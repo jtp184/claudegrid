@@ -11,6 +11,10 @@ class ClaudeGridApp {
     this.emptyState = document.getElementById('empty-state');
     this.soundToggle = document.getElementById('sound-toggle');
     this.clearLogBtn = document.getElementById('clear-log');
+    this.logToggle = document.getElementById('log-toggle');
+    this.controlsToggle = document.getElementById('controls-toggle');
+    this.eventLogPanel = document.getElementById('event-log');
+    this.controlsPanel = document.getElementById('controls');
 
     this.sessionGrid = new SessionGrid(this.canvas);
     this.eventLog = new EventLog(this.logContainer);
@@ -40,6 +44,22 @@ class ClaudeGridApp {
 
     this.clearLogBtn.addEventListener('click', () => {
       this.eventLog.clear();
+    });
+
+    this.logToggle.addEventListener('click', () => {
+      const isCollapsed = this.eventLogPanel.classList.toggle('collapsed');
+      document.body.classList.toggle('log-collapsed', isCollapsed);
+      this.logToggle.textContent = isCollapsed ? '▶' : '◀';
+      // Trigger resize for Three.js canvas
+      this.sessionGrid.onResize();
+    });
+
+    this.controlsToggle.addEventListener('click', () => {
+      const isCollapsed = this.controlsPanel.classList.toggle('collapsed');
+      document.body.classList.toggle('controls-collapsed', isCollapsed);
+      this.controlsToggle.textContent = isCollapsed ? '▲' : '▼';
+      // Trigger resize for Three.js canvas
+      this.sessionGrid.onResize();
     });
   }
 

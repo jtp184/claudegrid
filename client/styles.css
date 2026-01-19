@@ -68,10 +68,12 @@ body {
     right: 0;
     bottom: 50px;
     display: flex;
+    overflow: hidden;
 }
 
 #canvas {
     flex: 1;
+    min-width: 0;
     display: block;
 }
 
@@ -81,6 +83,21 @@ body {
     border-left: 1px solid #224466;
     display: flex;
     flex-direction: column;
+    transition: width 0.3s ease, min-width 0.3s ease;
+    min-width: 350px;
+}
+
+#event-log.collapsed {
+    width: 44px;
+    min-width: 44px;
+}
+
+#event-log.collapsed #log-entries {
+    display: none;
+}
+
+#event-log.collapsed #log-header span {
+    display: none;
 }
 
 #log-header {
@@ -89,6 +106,9 @@ body {
     letter-spacing: 3px;
     color: #446688;
     border-bottom: 1px solid #224466;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 #log-entries {
@@ -191,6 +211,38 @@ body {
     background: linear-gradient(0deg, rgba(0,20,40,0.9) 0%, rgba(0,10,20,0.7) 100%);
     border-top: 1px solid #224466;
     z-index: 100;
+    transition: height 0.3s ease, padding 0.3s ease;
+    overflow: hidden;
+}
+
+#controls.collapsed {
+    height: 24px;
+}
+
+#controls.collapsed #controls-content {
+    display: none;
+}
+
+#controls-content {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+#controls-toggle {
+    position: absolute;
+    left: 50%;
+    top: 2px;
+    transform: translateX(-50%);
+    border: none;
+    background: transparent;
+    padding: 2px 12px;
+}
+
+#controls-toggle:hover {
+    border: none;
+    background: transparent;
+    color: #88eeff;
 }
 
 .btn {
@@ -215,6 +267,23 @@ body {
     background: rgba(68, 255, 136, 0.1);
     border-color: #44ff88;
     color: #44ff88;
+}
+
+.toggle-btn {
+    background: transparent;
+    border: 1px solid #446688;
+    color: #44ddff;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 2px;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.toggle-btn:hover {
+    background: rgba(68, 221, 255, 0.1);
+    border-color: #44ddff;
 }
 
 #empty-state {
@@ -275,4 +344,103 @@ body {
     color: #ffdd44;
     text-shadow: 0 0 5px #ffdd44;
     font-size: 9px;
+}
+
+/* Collapsed state adjustments for main container and empty state */
+body.controls-collapsed #main-container {
+    bottom: 24px;
+}
+
+body.controls-collapsed #empty-state {
+    bottom: 24px;
+}
+
+body.log-collapsed #empty-state {
+    right: 44px;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 900px) {
+    #event-log {
+        width: 280px;
+        min-width: 280px;
+    }
+
+    #empty-state {
+        right: 280px;
+    }
+
+    body.log-collapsed #empty-state {
+        right: 44px;
+    }
+}
+
+@media (max-width: 700px) {
+    #event-log {
+        width: 200px;
+        min-width: 200px;
+    }
+
+    #empty-state {
+        right: 200px;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        font-size: 11px;
+    }
+
+    #header h1 {
+        font-size: 16px;
+        letter-spacing: 4px;
+    }
+
+    #status {
+        gap: 10px;
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 550px) {
+    /* Auto-collapse event log on very small screens */
+    #event-log {
+        width: 44px;
+        min-width: 44px;
+    }
+
+    #event-log #log-entries {
+        display: none;
+    }
+
+    #event-log #log-header span {
+        display: none;
+    }
+
+    #empty-state {
+        right: 44px;
+    }
+
+    #header h1 {
+        font-size: 14px;
+        letter-spacing: 2px;
+    }
+
+    #header {
+        padding: 0 10px;
+    }
+
+    #status {
+        gap: 8px;
+        font-size: 9px;
+    }
+
+    #controls-content {
+        gap: 10px;
+    }
+
+    .btn {
+        padding: 6px 12px;
+        font-size: 10px;
+        letter-spacing: 1px;
+    }
 }

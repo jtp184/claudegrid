@@ -18,14 +18,20 @@
     <div id="main-container">
         <canvas id="canvas"></canvas>
         <div id="event-log">
-            <div id="log-header">EVENT LOG</div>
+            <div id="log-header">
+                <span>EVENT LOG</span>
+                <button id="log-toggle" class="toggle-btn" title="Toggle event log">◀</button>
+            </div>
             <div id="log-entries"></div>
         </div>
     </div>
 
     <div id="controls">
-        <button id="sound-toggle" class="btn">SOUND: OFF</button>
-        <button id="clear-log" class="btn">CLEAR LOG</button>
+        <button id="controls-toggle" class="toggle-btn" title="Toggle controls">▼</button>
+        <div id="controls-content">
+            <button id="sound-toggle" class="btn">SOUND: OFF</button>
+            <button id="clear-log" class="btn">CLEAR LOG</button>
+        </div>
     </div>
 
     <div id="empty-state">
