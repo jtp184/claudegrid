@@ -34,17 +34,30 @@ class SessionManager {
       case 'UserPromptSubmit':
         if (session) {
           session.state = States.THINKING;
-          session.permissionBlocking = false;
+          session.pendingPermissions = 0;
           session.lastActivity = Date.now();
-          stateChange = { type: 'state', state: States.THINKING };
+          // Clear dimmed state when activity resumes
+          const wasDimmed = session.isDimmed;
+          session.isDimmed = false;
+          stateChange = { type: 'state', state: States.THINKING, undim: wasDimmed };
         }
         break;
 
       case 'PreToolUse':
         if (session) {
           session.lastActivity = Date.now();
-          // Pulse effect, stay in current state
-          stateChange = { type: 'pulse' };
+          const toolUseId = event.tool_use_id;
+          if (toolUseId) {
+            session.activeTools.set(toolUseId, {
+              tool_name: event.tool_name,
+              startTime: Date.now()
+            });
+          }
+          stateChange = {
+            type: 'tool_start',
+            tool_use_id: toolUseId,
+            tool_name: event.tool_name
+          };
         }
         break;
 
@@ -52,20 +65,35 @@ class SessionManager {
         if (session) {
           session.lastActivity = Date.now();
           const success = !event.tool_use_blocked;
+          const toolUseId = event.tool_use_id;
 
-          // Don't allow YES state if permission blocking is active
-          if (session.permissionBlocking && success) {
-            stateChange = { type: 'pulse' };  // Acknowledge but stay in NO
-          } else {
+          // Remove completed tool from active tools
+          if (toolUseId) {
+            session.activeTools.delete(toolUseId);
+          }
+
+          // Decrement pending permissions (if any)
+          if (session.pendingPermissions > 0) {
+            session.pendingPermissions--;
+          }
+
+          // Only allow state change if no more permissions pending
+          if (session.pendingPermissions === 0) {
             session.state = success ? States.YES : States.NO;
-            if (!success) {
-              session.permissionBlocking = true;  // Blocked tool also sets blocking
-            }
+            // Auto-revert to NEUTRAL if no more active tools, else THINKING
+            const revertState = session.activeTools.size === 0 ? States.NEUTRAL : States.THINKING;
             stateChange = {
-              type: 'state',
+              type: 'tool_end',
+              tool_use_id: toolUseId,
               state: session.state,
-              autoRevert: success ? States.THINKING : null,
+              autoRevert: success ? revertState : null,
               revertDelay: success ? 1500 : null
+            };
+          } else {
+            // Still permissions pending, just signal tool end
+            stateChange = {
+              type: 'tool_end',
+              tool_use_id: toolUseId
             };
           }
         }
@@ -75,7 +103,7 @@ class SessionManager {
       case 'SubagentStop':
         if (session) {
           session.state = States.NEUTRAL;
-          session.permissionBlocking = false;
+          session.pendingPermissions = 0;
           session.lastActivity = Date.now();
           stateChange = { type: 'state', state: States.NEUTRAL };
         }
@@ -84,7 +112,7 @@ class SessionManager {
       case 'SessionEnd':
         if (session) {
           session.state = States.ENDING;
-          session.permissionBlocking = false;
+          session.pendingPermissions = 0;
           stateChange = { type: 'end', state: States.ENDING };
           // Remove session after animation
           setTimeout(() => this.removeSession(session_id), 2000);
@@ -93,17 +121,24 @@ class SessionManager {
 
       case 'Notification':
         if (session) {
-          session.state = States.NO;
-          session.permissionBlocking = true;
           session.lastActivity = Date.now();
-          stateChange = { type: 'state', state: States.NO };
+          // Check if this is an idle_prompt notification - dim instead of switching to NO
+          const notificationType = event.notification_type || event.type;
+          if (notificationType === 'idle_prompt') {
+            session.isDimmed = true;
+            stateChange = { type: 'dim', dimmed: true };
+          } else {
+            session.state = States.NO;
+            session.pendingPermissions++;
+            stateChange = { type: 'state', state: States.NO };
+          }
         }
         break;
 
       case 'PermissionRequest':
         if (session) {
           session.state = States.NO;
-          session.permissionBlocking = true;
+          session.pendingPermissions++;
           session.lastActivity = Date.now();
           stateChange = { type: 'state', state: States.NO };
         }
@@ -124,7 +159,9 @@ class SessionManager {
       id: session_id,
       parent_id: parent_session_id,
       state: States.NEUTRAL,
-      permissionBlocking: false,
+      pendingPermissions: 0,
+      isDimmed: false,
+      activeTools: new Map(),
       createdAt: Date.now(),
       lastActivity: Date.now()
     };
@@ -187,9 +224,21 @@ class SessionManager {
     const roots = [];
     const tree = new Map();
 
+    // Helper to serialize session with activeTools as array
+    const serializeSession = (session) => {
+      const { activeTools, ...rest } = session;
+      return {
+        ...rest,
+        activeTools: Array.from(activeTools.entries()).map(([id, data]) => ({
+          tool_use_id: id,
+          ...data
+        }))
+      };
+    };
+
     for (const session of this.sessions.values()) {
       if (!session.parent_id) {
-        const node = { ...session, subagents: [] };
+        const node = { ...serializeSession(session), subagents: [] };
         roots.push(node);
         tree.set(session.id, node);
       }
@@ -199,10 +248,10 @@ class SessionManager {
       if (session.parent_id) {
         const parent = tree.get(session.parent_id);
         if (parent) {
-          parent.subagents.push({ ...session, subagents: [] });
+          parent.subagents.push({ ...serializeSession(session), subagents: [] });
         } else {
           // Parent doesn't exist, treat as root
-          roots.push({ ...session, subagents: [] });
+          roots.push({ ...serializeSession(session), subagents: [] });
         }
       }
     }

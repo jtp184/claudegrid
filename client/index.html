@@ -6,7 +6,7 @@
     <title>ClaudeGrid - Session Visualizer</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="log-collapsed controls-collapsed">
     <div id="header">
         <h1>CLAUDEGRID</h1>
         <div id="status">
@@ -17,17 +17,17 @@
 
     <div id="main-container">
         <canvas id="canvas"></canvas>
-        <div id="event-log">
+        <div id="event-log" class="collapsed">
             <div id="log-header">
                 <span>EVENT LOG</span>
-                <button id="log-toggle" class="toggle-btn" title="Toggle event log">◀</button>
+                <button id="log-toggle" class="toggle-btn" title="Toggle event log">▶</button>
             </div>
             <div id="log-entries"></div>
         </div>
     </div>
 
-    <div id="controls">
-        <button id="controls-toggle" class="toggle-btn" title="Toggle controls">▼</button>
+    <div id="controls" class="collapsed">
+        <button id="controls-toggle" class="toggle-btn" title="Toggle controls">▲</button>
         <div id="controls-content">
             <button id="sound-toggle" class="btn">SOUND: OFF</button>
             <button id="clear-log" class="btn">CLEAR LOG</button>

@@ -1,7 +1,10 @@
 // AudioManager - Tone.js synth sounds for events
 export class AudioManager {
+  // Sound modes: 'off', 'on', 'request' (UserPromptSubmit, PermissionRequest, Stop)
+  static MODES = ['off', 'on', 'request'];
+
   constructor() {
-    this.enabled = false;
+    this.mode = 'off';
     this.initialized = false;
     this.synth = null;
     this.noiseSynth = null;
@@ -47,12 +50,15 @@ export class AudioManager {
   }
 
   toggle() {
-    this.enabled = !this.enabled;
-    return this.enabled;
+    const modes = AudioManager.MODES;
+    const currentIndex = modes.indexOf(this.mode);
+    this.mode = modes[(currentIndex + 1) % modes.length];
+    return this.mode;
   }
 
   async play(eventType) {
-    if (!this.enabled) return;
+    if (this.mode === 'off') return;
+    if (this.mode === 'request' && eventType !== 'UserPromptSubmit' && eventType !== 'Stop' && eventType !== 'PermissionRequest') return;
 
     if (!this.initialized) {
       await this.init();
@@ -90,6 +96,12 @@ export class AudioManager {
       case 'PostToolUse_failure':
         // Brown noise burst
         this.noiseSynth.triggerAttackRelease('16n', now);
+        break;
+
+      case 'PermissionRequest':
+        // Attention-getting descending tone for permission prompt
+        this.synth.triggerAttackRelease('E5', '32n', now);
+        this.synth.triggerAttackRelease('C5', '16n', now + 0.1);
         break;
 
       case 'SessionEnd':

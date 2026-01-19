@@ -32,11 +32,12 @@ class ClaudeGridApp {
 
   setupEventListeners() {
     this.soundToggle.addEventListener('click', async () => {
-      const enabled = this.audioManager.toggle();
-      this.soundToggle.textContent = `SOUND: ${enabled ? 'ON' : 'OFF'}`;
-      this.soundToggle.classList.toggle('active', enabled);
+      const mode = this.audioManager.toggle();
+      const modeLabels = { off: 'OFF', on: 'ON', request: 'REQUEST ONLY' };
+      this.soundToggle.textContent = `SOUND: ${modeLabels[mode]}`;
+      this.soundToggle.classList.toggle('active', mode !== 'off');
 
-      if (enabled) {
+      if (mode !== 'off') {
         // Initialize audio on first enable (requires user gesture)
         await this.audioManager.init();
       }

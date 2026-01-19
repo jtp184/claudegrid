@@ -46,6 +46,7 @@ const bitFragmentShader = `
   uniform vec3 uColor;
   uniform float uTime;
   uniform float uOpacity;
+  uniform float uDim;
 
   varying vec3 vNormal;
   varying vec3 vPosition;
@@ -57,8 +58,12 @@ const bitFragmentShader = `
 
     float pulse = 0.8 + 0.2 * sin(uTime * 3.0);
 
-    vec3 color = uColor * (0.5 + fresnel * 1.5) * pulse;
-    float alpha = uOpacity + fresnel * 0.7;
+    // Apply dimming - reduce brightness and pulse when dimmed
+    float dimFactor = 1.0 - uDim * 0.7;
+    float dimmedPulse = mix(pulse, 0.9, uDim);
+
+    vec3 color = uColor * (0.5 + fresnel * 1.5) * dimmedPulse * dimFactor;
+    float alpha = (uOpacity + fresnel * 0.7) * dimFactor;
 
     gl_FragColor = vec4(color, alpha);
   }
@@ -73,10 +78,14 @@ const edgeVertexShader = `
 const edgeFragmentShader = `
   uniform vec3 uColor;
   uniform float uTime;
+  uniform float uDim;
 
   void main() {
     float pulse = 0.9 + 0.1 * sin(uTime * 4.0);
-    gl_FragColor = vec4(uColor * 2.0 * pulse, 1.0);
+    // Apply dimming to edges
+    float dimFactor = 1.0 - uDim * 0.7;
+    float dimmedPulse = mix(pulse, 0.95, uDim);
+    gl_FragColor = vec4(uColor * 2.0 * dimmedPulse * dimFactor, 1.0);
   }
 `;
 
@@ -169,6 +178,181 @@ function getGeometry(state) {
   return geometry;
 }
 
+// Tool bit color (white)
+const ToolBitColor = new THREE.Color(0xffffff);
+
+// Simple shader for tool bits
+const toolBitVertexShader = `
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+
+  void main() {
+    vNormal = normalize(normalMatrix * normal);
+    vPosition = position;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const toolBitFragmentShader = `
+  uniform vec3 uColor;
+  uniform float uTime;
+  uniform float uOpacity;
+
+  varying vec3 vNormal;
+  varying vec3 vPosition;
+
+  void main() {
+    vec3 viewDir = normalize(cameraPosition - vPosition);
+    float fresnel = 1.0 - abs(dot(viewDir, vNormal));
+    fresnel = pow(fresnel, 2.0);
+
+    float pulse = 0.9 + 0.1 * sin(uTime * 5.0);
+
+    vec3 color = uColor * (0.6 + fresnel * 1.2) * pulse;
+    float alpha = uOpacity * (0.8 + fresnel * 0.5);
+
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+class ToolBit {
+  constructor(toolUseId, toolName, orbitIndex = 0, totalTools = 1) {
+    this.toolUseId = toolUseId;
+    this.toolName = toolName;
+    this.orbitIndex = orbitIndex;
+    this.totalTools = totalTools;
+
+    this.scale = 0.2;
+    this.orbitRadius = 0.8;
+    this.orbitSpeed = 2.0;
+    this.orbitAngle = (orbitIndex / totalTools) * Math.PI * 2;
+
+    // Animation state
+    this.currentScale = 0;
+    this.targetScale = this.scale;
+    this.opacity = 1;
+    this.isDespawning = false;
+    this.isFinished = false;
+
+    this.group = new THREE.Group();
+    this.createMesh();
+  }
+
+  createMesh() {
+    const geometry = new THREE.IcosahedronGeometry(1, 0);
+
+    this.material = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: ToolBitColor.clone() },
+        uTime: { value: 0 },
+        uOpacity: { value: 1 }
+      },
+      vertexShader: toolBitVertexShader,
+      fragmentShader: toolBitFragmentShader,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    this.mesh = new THREE.Mesh(geometry, this.material);
+    this.group.add(this.mesh);
+
+    // Add edges
+    const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
+    this.edgeMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: ToolBitColor.clone() },
+        uTime: { value: 0 },
+        uOpacity: { value: 1 }
+      },
+      vertexShader: `
+        void main() {
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uTime;
+        uniform float uOpacity;
+
+        void main() {
+          float pulse = 0.9 + 0.1 * sin(uTime * 6.0);
+          gl_FragColor = vec4(uColor * 2.0 * pulse, uOpacity);
+        }
+      `,
+      transparent: true
+    });
+
+    this.edges = new THREE.LineSegments(edgesGeo, this.edgeMaterial);
+    this.group.add(this.edges);
+
+    // Initial scale
+    this.group.scale.setScalar(0.01);
+  }
+
+  updateOrbitPosition(orbitIndex, totalTools) {
+    this.orbitIndex = orbitIndex;
+    this.totalTools = totalTools;
+  }
+
+  startDespawn() {
+    this.isDespawning = true;
+    this.targetScale = 0;
+  }
+
+  update(delta, elapsed) {
+    if (this.isFinished) return;
+
+    // Update shader time
+    this.material.uniforms.uTime.value = elapsed;
+    this.edgeMaterial.uniforms.uTime.value = elapsed;
+
+    // Animate scale
+    const scaleDiff = this.targetScale - this.currentScale;
+    if (Math.abs(scaleDiff) > 0.001) {
+      this.currentScale += scaleDiff * Math.min(1, delta * 8);
+    } else {
+      this.currentScale = this.targetScale;
+    }
+
+    // Animate opacity during despawn
+    if (this.isDespawning) {
+      this.opacity -= delta * 4;
+      if (this.opacity <= 0) {
+        this.opacity = 0;
+        this.isFinished = true;
+      }
+      this.material.uniforms.uOpacity.value = this.opacity;
+      this.edgeMaterial.uniforms.uOpacity.value = this.opacity;
+    }
+
+    // Update orbit position
+    this.orbitAngle += delta * this.orbitSpeed;
+
+    // Calculate position with even distribution
+    const baseAngle = (this.orbitIndex / Math.max(1, this.totalTools)) * Math.PI * 2;
+    const currentAngle = baseAngle + this.orbitAngle;
+
+    this.group.position.x = Math.cos(currentAngle) * this.orbitRadius;
+    this.group.position.z = Math.sin(currentAngle) * this.orbitRadius;
+    this.group.position.y = 0;
+
+    // Apply scale
+    this.group.scale.setScalar(Math.max(0.01, this.currentScale));
+
+    // Spin on own axis
+    this.group.rotation.y += delta * 3;
+    this.group.rotation.x += delta * 2;
+  }
+
+  dispose() {
+    this.mesh.geometry.dispose();
+    this.material.dispose();
+    this.edges.geometry.dispose();
+    this.edgeMaterial.dispose();
+  }
+}
+
 export class BitVisualizer {
   constructor(sessionId, isSubagent = false) {
     this.sessionId = sessionId;
@@ -192,12 +376,24 @@ export class BitVisualizer {
     // Pulse effect
     this.pulseIntensity = 0;
 
+    // Dimming state (for idle)
+    this.isDimmed = false;
+    this.currentDim = 0;
+    this.targetDim = 0;
+    this.dimSpeed = 2; // How fast to transition dim
+
     // Shatter particles
     this.shatterParticles = null;
     this.isShattered = false;
 
     // Auto-revert timer
     this.revertTimeout = null;
+
+    // Event data for hover labels
+    this.eventData = null;
+
+    // Tool bits for active tool uses
+    this.toolBits = new Map();
 
     this.group = new THREE.Group();
     this.group.scale.setScalar(this.scale);
@@ -213,7 +409,8 @@ export class BitVisualizer {
       uniforms: {
         uColor: { value: StateColors.neutral.clone() },
         uTime: { value: 0 },
-        uOpacity: { value: 0.3 }
+        uOpacity: { value: 0.3 },
+        uDim: { value: 0 }
       },
       vertexShader: bitVertexShader,
       fragmentShader: bitFragmentShader,
@@ -226,7 +423,8 @@ export class BitVisualizer {
     this.edgeMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uColor: { value: StateColors.neutral.clone() },
-        uTime: { value: 0 }
+        uTime: { value: 0 },
+        uDim: { value: 0 }
       },
       vertexShader: edgeVertexShader,
       fragmentShader: edgeFragmentShader
@@ -254,6 +452,13 @@ export class BitVisualizer {
     // Track if session has done work
     if (newState === States.THINKING) {
       this.hasWorked = true;
+    }
+
+    // Clear tool-related event data when reverting to neutral/thinking
+    if ((newState === States.NEUTRAL || newState === States.THINKING) && this.eventData) {
+      this.eventData.tool_name = null;
+      this.eventData.tool_input = null;
+      this.eventData.message = null;
     }
 
     this.targetState = newState;
@@ -294,6 +499,24 @@ export class BitVisualizer {
 
   pulse() {
     this.pulseIntensity = 1.0;
+  }
+
+  setDimmed(dimmed) {
+    this.isDimmed = dimmed;
+    this.targetDim = dimmed ? 1 : 0;
+  }
+
+  setEventData(eventData) {
+    if (eventData?.event) {
+      const e = eventData.event;
+      this.eventData = {
+        cwd: e.cwd,
+        tool_name: e.tool_name,
+        tool_input: e.tool_input,
+        message: e.message,
+        hook_event_name: e.hook_event_name
+      };
+    }
   }
 
   getCurrentColor() {
@@ -351,6 +574,37 @@ export class BitVisualizer {
     this.group.add(this.shatterParticles);
   }
 
+  addToolBit(toolUseId, toolName) {
+    if (this.toolBits.has(toolUseId)) return;
+
+    const totalTools = this.toolBits.size + 1;
+    const toolBit = new ToolBit(toolUseId, toolName, this.toolBits.size, totalTools);
+    this.toolBits.set(toolUseId, toolBit);
+    this.group.add(toolBit.group);
+
+    // Update orbit positions for all tool bits to distribute evenly
+    this.updateToolBitOrbits();
+  }
+
+  removeToolBit(toolUseId) {
+    const toolBit = this.toolBits.get(toolUseId);
+    if (!toolBit) return;
+
+    toolBit.startDespawn();
+    // Update orbit positions for remaining active tools
+    this.updateToolBitOrbits();
+  }
+
+  updateToolBitOrbits() {
+    // Count only non-despawning tool bits for distribution
+    const activeTools = Array.from(this.toolBits.values()).filter(tb => !tb.isDespawning);
+    const totalActive = activeTools.length;
+
+    activeTools.forEach((toolBit, index) => {
+      toolBit.updateOrbitPosition(index, totalActive);
+    });
+  }
+
   update(delta, elapsed) {
     if (this.isShattered) {
       this.updateShatter(delta);
@@ -361,14 +615,27 @@ export class BitVisualizer {
     this.bitMaterial.uniforms.uTime.value = elapsed;
     this.edgeMaterial.uniforms.uTime.value = elapsed;
 
+    // Update dimming smoothly
+    if (this.currentDim !== this.targetDim) {
+      const dimDiff = this.targetDim - this.currentDim;
+      this.currentDim += dimDiff * Math.min(1, delta * this.dimSpeed);
+      if (Math.abs(dimDiff) < 0.01) {
+        this.currentDim = this.targetDim;
+      }
+      this.bitMaterial.uniforms.uDim.value = this.currentDim;
+      this.edgeMaterial.uniforms.uDim.value = this.currentDim;
+    }
+
     // Update morphing
     this.updateMorph(delta);
 
-    // Rotation based on state (faster if session has worked)
+    // Rotation based on state (faster if session has worked, slower if dimmed)
     let rotSpeed = RotationSpeeds[this.state] || 1.0;
     if (this.hasWorked && this.state !== States.THINKING) {
       rotSpeed *= WORKED_ROTATION_MULTIPLIER;
     }
+    // Slow rotation when dimmed
+    rotSpeed *= (1 - this.currentDim * 0.7);
     this.group.rotation.y += delta * rotSpeed;
     this.group.rotation.x = Math.sin(elapsed * 0.3) * 0.1;
 
@@ -387,6 +654,18 @@ export class BitVisualizer {
       this.group.scale.setScalar(pulseScale);
     } else if (this.morphProgress >= 1) {
       this.group.scale.setScalar(this.scale);
+    }
+
+    // Update tool bits
+    for (const [toolUseId, toolBit] of this.toolBits) {
+      toolBit.update(delta, elapsed);
+
+      // Clean up finished tool bits
+      if (toolBit.isFinished) {
+        this.group.remove(toolBit.group);
+        toolBit.dispose();
+        this.toolBits.delete(toolUseId);
+      }
     }
   }
 
@@ -496,5 +775,12 @@ export class BitVisualizer {
       this.shatterParticles.geometry.dispose();
       this.shatterParticles.material.dispose();
     }
+
+    // Clean up tool bits
+    for (const toolBit of this.toolBits.values()) {
+      this.group.remove(toolBit.group);
+      toolBit.dispose();
+    }
+    this.toolBits.clear();
   }
 }

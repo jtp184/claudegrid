@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BitVisualizer, States } from './BitVisualizer.js';
+import { HoverLabelManager } from './HoverLabelManager.js';
 
 export class SessionGrid {
   constructor(canvas) {
@@ -13,6 +14,9 @@ export class SessionGrid {
     this.initScene();
     this.initPostProcessing();
     this.initBackground();
+
+    // Initialize hover label manager
+    this.hoverLabelManager = new HoverLabelManager(this.canvas, this.camera);
 
     this.clock = new THREE.Clock();
 
@@ -212,17 +216,49 @@ export class SessionGrid {
         const parentId = event?.parent_session_id || null;
         bit = this.createSession(session_id, parentId);
         bit.setState(state);
+        bit.setEventData(eventData);
         break;
 
       case 'state':
         if (bit) {
           bit.setState(state, eventData.autoRevert, eventData.revertDelay);
+          bit.setEventData(eventData);
+          // Clear dimming if undim flag is set (activity resumed)
+          if (eventData.undim) {
+            bit.setDimmed(false);
+          }
         }
         break;
 
       case 'pulse':
         if (bit) {
           bit.pulse();
+          bit.setEventData(eventData);
+        }
+        break;
+
+      case 'tool_start':
+        if (bit) {
+          bit.addToolBit(eventData.tool_use_id, eventData.tool_name);
+          bit.pulse();
+          bit.setEventData(eventData);
+        }
+        break;
+
+      case 'tool_end':
+        if (bit) {
+          bit.removeToolBit(eventData.tool_use_id);
+          bit.setEventData(eventData);
+          // Apply state change if provided
+          if (eventData.state) {
+            bit.setState(eventData.state, eventData.autoRevert, eventData.revertDelay);
+          }
+        }
+        break;
+
+      case 'dim':
+        if (bit) {
+          bit.setDimmed(eventData.dimmed);
         }
         break;
 
@@ -260,6 +296,18 @@ export class SessionGrid {
         }
       }
 
+      // Apply dimmed state from server
+      if (session.isDimmed) {
+        bit.setDimmed(true);
+      }
+
+      // Restore active tools from server
+      if (session.activeTools && session.activeTools.length > 0) {
+        for (const tool of session.activeTools) {
+          bit.addToolBit(tool.tool_use_id, tool.tool_name);
+        }
+      }
+
       if (session.subagents) {
         for (const subagent of session.subagents) {
           const subBit = this.createSession(subagent.id, session.id);
@@ -269,6 +317,16 @@ export class SessionGrid {
             }
             if (subagent.state !== 'neutral') {
               subBit.setState(subagent.state);
+            }
+          }
+          // Apply dimmed state from server
+          if (subagent.isDimmed) {
+            subBit.setDimmed(true);
+          }
+          // Restore active tools from server
+          if (subagent.activeTools && subagent.activeTools.length > 0) {
+            for (const tool of subagent.activeTools) {
+              subBit.addToolBit(tool.tool_use_id, tool.tool_name);
             }
           }
         }
@@ -308,6 +366,9 @@ export class SessionGrid {
     if (this.particles) {
       this.particles.rotation.y += delta * 0.02;
     }
+
+    // Update hover labels
+    this.hoverLabelManager.update(this.sessions);
 
     // Render with post-processing
     this.composer.render();
