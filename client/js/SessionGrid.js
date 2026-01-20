@@ -249,10 +249,7 @@ export class SessionGrid {
         if (bit) {
           bit.removeToolBit(eventData.tool_use_id);
           bit.setEventData(eventData);
-          // Apply state change if provided
-          if (eventData.state) {
-            bit.setState(eventData.state, eventData.autoRevert, eventData.revertDelay);
-          }
+          // State is now managed by BitVisualizer based on tool count
         }
         break;
 

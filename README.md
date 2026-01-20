@@ -14,7 +14,7 @@ ClaudeGrid transforms your Claude Code sessions into an immersive, cyberpunk-sty
   - Cyan icosahedron: Idle/neutral state
   - Fast-spinning cyan: Processing your prompt
   - Yellow octahedron: Successful tool execution
-  - Red starburst: Blocked/failed tool execution
+  - Orange starburst: Blocked/failed tool execution
   - Shatter particles: Session ending
 - **Subagent hierarchy** — Child agents orbit around their parent sessions
 - **Event log sidebar** — Detailed activity feed with timestamps and tool details
@@ -107,6 +107,7 @@ claudegrid/
 │       ├── main.js            # App orchestrator
 │       ├── SessionGrid.js     # Three.js scene & layout
 │       ├── BitVisualizer.js   # 3D Bit rendering
+│       ├── HoverLabelManager.js # Hover labels for Bits
 │       ├── AudioManager.js    # Tone.js sound effects
 │       └── EventLog.js        # Activity log sidebar
 ├── server/
@@ -138,7 +139,7 @@ Receives Claude Code hook events.
 }
 ```
 
-**Response:** `200 OK` with `{ "status": "ok" }`
+**Response:** `200 OK` with `{ "ok": true }`
 
 #### `GET /api/sessions`
 
@@ -147,11 +148,13 @@ Returns the current session tree.
 **Response:**
 ```json
 {
-  "abc123": {
-    "sessionId": "abc123",
-    "state": "NEUTRAL",
-    "children": ["xyz789"]
-  }
+  "sessions": [
+    {
+      "id": "abc123",
+      "state": "neutral",
+      "subagents": []
+    }
+  ]
 }
 ```
 
@@ -159,7 +162,14 @@ Returns the current session tree.
 
 Health check endpoint.
 
-**Response:** `200 OK` with `{ "status": "healthy" }`
+**Response:**
+```json
+{
+  "status": "ok",
+  "sessions": 1,
+  "clients": 2
+}
+```
 
 ### WebSocket Messages
 
@@ -167,19 +177,22 @@ Connect to `/ws` for real-time updates.
 
 **Server → Client messages:**
 
+On connection, receives current state:
 ```json
 {
-  "type": "sessionEvent",
-  "event": "PreToolUse",
-  "sessionId": "abc123",
-  "data": { ... }
+  "messageType": "init",
+  "sessions": [...]
 }
 ```
 
+On events:
 ```json
 {
-  "type": "fullState",
-  "sessions": { ... }
+  "messageType": "event",
+  "session_id": "abc123",
+  "type": "state",
+  "state": "thinking",
+  "event": { ... }
 }
 ```
 
@@ -191,11 +204,13 @@ ClaudeGrid responds to these Claude Code lifecycle events:
 |-------|-------------|---------------|
 | `SessionStart` | New session created | New Bit appears |
 | `UserPromptSubmit` | User submitted a prompt | Bit enters thinking state |
-| `PreToolUse` | Tool about to execute | Pulse animation |
+| `PreToolUse` | Tool about to execute | Orbiting tool bit spawns |
 | `PostToolUse` | Tool finished | Yes (success) or No (blocked) state |
 | `Stop` | Main session stopped | Returns to neutral |
 | `SubagentStop` | Subagent stopped | Returns to neutral |
 | `SessionEnd` | Session terminated | Shatter animation, Bit removed |
+| `Notification` | System notification | No state (permission request) or dims (idle) |
+| `PermissionRequest` | Permission requested | No state (orange starburst) |
 
 ## Development
 

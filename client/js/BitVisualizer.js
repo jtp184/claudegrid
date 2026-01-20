@@ -223,7 +223,7 @@ class ToolBit {
     this.totalTools = totalTools;
 
     this.scale = 0.2;
-    this.orbitRadius = 0.8;
+    this.orbitRadius = 1.4;
     this.orbitSpeed = 2.0;
     this.orbitAngle = (orbitIndex / totalTools) * Math.PI * 2;
 
@@ -461,11 +461,23 @@ export class BitVisualizer {
       this.eventData.message = null;
     }
 
+    // Despawn all orbiting tool bits when entering NO state
+    if (newState === States.NO) {
+      for (const toolBit of this.toolBits.values()) {
+        if (!toolBit.isDespawning) {
+          toolBit.startDespawn();
+        }
+      }
+    }
+
+    // Use targetState if mid-morph, since that's what geometry is transitioning toward
+    const effectiveCurrentState = this.morphProgress < 1 ? this.targetState : this.state;
+
     this.targetState = newState;
     this.sourceColor = this.getCurrentColor().clone();
     this.targetColor = StateColors[newState].clone();
 
-    const currentGeoState = this.state === States.THINKING ? States.NEUTRAL : this.state;
+    const currentGeoState = effectiveCurrentState === States.THINKING ? States.NEUTRAL : effectiveCurrentState;
     const targetGeoState = newState === States.THINKING ? States.NEUTRAL : newState;
 
     // Check if geometry needs to change
@@ -576,6 +588,8 @@ export class BitVisualizer {
 
   addToolBit(toolUseId, toolName) {
     if (this.toolBits.has(toolUseId)) return;
+    // Don't add orbiting bits during NO state
+    if (this.state === States.NO || this.targetState === States.NO) return;
 
     const totalTools = this.toolBits.size + 1;
     const toolBit = new ToolBit(toolUseId, toolName, this.toolBits.size, totalTools);
@@ -584,6 +598,11 @@ export class BitVisualizer {
 
     // Update orbit positions for all tool bits to distribute evenly
     this.updateToolBitOrbits();
+
+    // Set parent to YES when tools are active
+    if (this.toolBits.size >= 1) {
+      this.setState(States.YES);
+    }
   }
 
   removeToolBit(toolUseId) {
@@ -593,6 +612,15 @@ export class BitVisualizer {
     toolBit.startDespawn();
     // Update orbit positions for remaining active tools
     this.updateToolBitOrbits();
+
+    // Manage state based on remaining active tools
+    const activeCount = Array.from(this.toolBits.values())
+      .filter(tb => !tb.isDespawning).length;
+
+    if (activeCount === 0) {
+      // No tools remaining - return to THINKING
+      this.setState(States.THINKING);
+    }
   }
 
   updateToolBitOrbits() {

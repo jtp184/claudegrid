@@ -34,7 +34,7 @@ class SessionManager {
       case 'UserPromptSubmit':
         if (session) {
           session.state = States.THINKING;
-          session.pendingPermissions = 0;
+          session.pendingPermissions.clear();
           session.lastActivity = Date.now();
           // Clear dimmed state when activity resumes
           const wasDimmed = session.isDimmed;
@@ -72,13 +72,13 @@ class SessionManager {
             session.activeTools.delete(toolUseId);
           }
 
-          // Decrement pending permissions (if any)
-          if (session.pendingPermissions > 0) {
-            session.pendingPermissions--;
+          // Remove this tool from pending permissions (if it was waiting for permission)
+          if (toolUseId) {
+            session.pendingPermissions.delete(toolUseId);
           }
 
           // Only allow state change if no more permissions pending
-          if (session.pendingPermissions === 0) {
+          if (session.pendingPermissions.size === 0) {
             session.state = success ? States.YES : States.NO;
             // Auto-revert to NEUTRAL if no more active tools, else THINKING
             const revertState = session.activeTools.size === 0 ? States.NEUTRAL : States.THINKING;
@@ -103,7 +103,7 @@ class SessionManager {
       case 'SubagentStop':
         if (session) {
           session.state = States.NEUTRAL;
-          session.pendingPermissions = 0;
+          session.pendingPermissions.clear();
           session.lastActivity = Date.now();
           stateChange = { type: 'state', state: States.NEUTRAL };
         }
@@ -112,7 +112,7 @@ class SessionManager {
       case 'SessionEnd':
         if (session) {
           session.state = States.ENDING;
-          session.pendingPermissions = 0;
+          session.pendingPermissions.clear();
           stateChange = { type: 'end', state: States.ENDING };
           // Remove session after animation
           setTimeout(() => this.removeSession(session_id), 2000);
@@ -129,7 +129,8 @@ class SessionManager {
             stateChange = { type: 'dim', dimmed: true };
           } else {
             session.state = States.NO;
-            session.pendingPermissions++;
+            const notificationId = event.notification_id || `notification_${Date.now()}`;
+            session.pendingPermissions.add(notificationId);
             stateChange = { type: 'state', state: States.NO };
           }
         }
@@ -138,7 +139,8 @@ class SessionManager {
       case 'PermissionRequest':
         if (session) {
           session.state = States.NO;
-          session.pendingPermissions++;
+          const permissionToolId = event.tool_use_id || `permission_${Date.now()}`;
+          session.pendingPermissions.add(permissionToolId);
           session.lastActivity = Date.now();
           stateChange = { type: 'state', state: States.NO };
         }
@@ -159,7 +161,7 @@ class SessionManager {
       id: session_id,
       parent_id: parent_session_id,
       state: States.NEUTRAL,
-      pendingPermissions: 0,
+      pendingPermissions: new Set(),
       isDimmed: false,
       activeTools: new Map(),
       createdAt: Date.now(),
