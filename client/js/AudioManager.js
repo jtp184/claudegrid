@@ -15,43 +15,50 @@ export class AudioManager {
   async init() {
     if (this.initialized) return;
 
-    // Dynamically import Tone.js (uses import map)
-    const Tone = await import('tone');
-    this.Tone = Tone;
+    try {
+      // Dynamically import Tone.js (uses import map)
+      const ToneModule = await import('tone');
+      // esm.sh may export as default or named exports
+      this.Tone = ToneModule.default || ToneModule;
+      console.log('Tone.js loaded:', Object.keys(this.Tone));
 
-    // Create synths
-    this.synth = new this.Tone.PolySynth(this.Tone.Synth, {
-      oscillator: { type: 'square' },
-      envelope: {
-        attack: 0.01,
-        decay: 0.2,
-        sustain: 0.1,
-        release: 0.3
-      }
-    }).toDestination();
+      // Create synths
+      this.synth = new this.Tone.PolySynth(this.Tone.Synth, {
+        oscillator: { type: 'square' },
+        envelope: {
+          attack: 0.01,
+          decay: 0.2,
+          sustain: 0.1,
+          release: 0.3
+        }
+      }).toDestination();
 
-    this.synth.volume.value = -12;
+      this.synth.volume.value = -12;
 
-    // Noise synth for error/blocked sounds
-    this.noiseSynth = new this.Tone.NoiseSynth({
-      noise: { type: 'brown' },
-      envelope: {
-        attack: 0.01,
-        decay: 0.1,
-        sustain: 0.05,
-        release: 0.1
-      }
-    }).toDestination();
+      // Noise synth for error/blocked sounds
+      this.noiseSynth = new this.Tone.NoiseSynth({
+        noise: { type: 'brown' },
+        envelope: {
+          attack: 0.01,
+          decay: 0.1,
+          sustain: 0.05,
+          release: 0.1
+        }
+      }).toDestination();
 
-    this.noiseSynth.volume.value = -18;
+      this.noiseSynth.volume.value = -18;
 
-    // Start audio context (requires user gesture)
-    await this.Tone.start();
+      // Start audio context (requires user gesture)
+      await this.Tone.start();
+      console.log('Tone.js audio context started');
 
-    this.initialized = true;
+      this.initialized = true;
 
-    // Apply initial volume
-    this.setVolume(this.volume);
+      // Apply initial volume
+      this.setVolume(this.volume);
+    } catch (err) {
+      console.error('AudioManager init failed:', err);
+    }
   }
 
   toggle() {
@@ -77,11 +84,15 @@ export class AudioManager {
     if (this.mode === 'response' && !AudioManager.RESPONSE_EVENTS.includes(eventType)) return;
 
     if (!this.initialized) {
+      console.log('AudioManager: initializing from play()');
       await this.init();
-      // Start Tone.js context (requires user gesture)
-      await this.Tone.start();
+      if (!this.initialized) {
+        console.warn('AudioManager: init failed, cannot play');
+        return;
+      }
     }
 
+    console.log('AudioManager: playing', eventType);
     const now = this.Tone.now();
 
     switch (eventType) {

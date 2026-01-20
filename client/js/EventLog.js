@@ -23,11 +23,11 @@ export class EventLog {
   }
 
   createEntry(event) {
-    const { session_id, event: rawEvent } = event;
-    const hookEvent = rawEvent?.hook_event_name || event.type;
+    const { session_id, hook_event_name, tool_name, tool_use_blocked } = event;
+    const hookEvent = hook_event_name || event.type || 'Unknown';
 
     const el = document.createElement('div');
-    el.className = `log-entry ${this.getEntryClass(hookEvent, rawEvent)}`;
+    el.className = `log-entry ${this.getEntryClass(hookEvent, event)}`;
 
     const time = new Date().toLocaleTimeString('en-US', {
       hour12: false,
@@ -39,13 +39,11 @@ export class EventLog {
     const sessionShort = session_id ? session_id.slice(0, 8) : 'unknown';
 
     let details = '';
-    if (rawEvent) {
-      if (rawEvent.tool_name) {
-        details = `Tool: ${rawEvent.tool_name}`;
-      }
-      if (rawEvent.tool_use_blocked) {
-        details += ' [BLOCKED]';
-      }
+    if (tool_name) {
+      details = `Tool: ${tool_name}`;
+    }
+    if (tool_use_blocked) {
+      details += ' [BLOCKED]';
     }
 
     el.innerHTML = `
@@ -58,7 +56,7 @@ export class EventLog {
     return { element: el, event };
   }
 
-  getEntryClass(hookEvent, rawEvent) {
+  getEntryClass(hookEvent, event) {
     switch (hookEvent) {
       case 'SessionStart':
         return 'session-start';
@@ -68,7 +66,7 @@ export class EventLog {
         return 'user-prompt';
       case 'PreToolUse':
       case 'PostToolUse':
-        if (rawEvent?.tool_use_blocked) {
+        if (event?.tool_use_blocked) {
           return 'tool-blocked';
         }
         return 'tool-use';

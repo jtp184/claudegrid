@@ -77,6 +77,17 @@ class ClaudeGridApp {
   }
 
   setupEventListeners() {
+    // Initialize audio on first user interaction (required by browser autoplay policy)
+    const initAudioOnce = async () => {
+      if (this.audioManager.mode !== 'off') {
+        await this.audioManager.init();
+      }
+      document.removeEventListener('click', initAudioOnce);
+      document.removeEventListener('keydown', initAudioOnce);
+    };
+    document.addEventListener('click', initAudioOnce);
+    document.addEventListener('keydown', initAudioOnce);
+
     this.soundToggle.addEventListener('click', async () => {
       const mode = this.audioManager.toggle();
       const modeLabels = { off: 'OFF', response: 'RESPONSE ONLY', on: 'ON' };
@@ -84,7 +95,7 @@ class ClaudeGridApp {
       this.soundToggle.classList.toggle('active', mode !== 'off');
 
       if (mode !== 'off') {
-        // Initialize audio on first enable (requires user gesture)
+        // Initialize audio on enable (requires user gesture)
         await this.audioManager.init();
       }
     });
