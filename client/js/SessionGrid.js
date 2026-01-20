@@ -10,6 +10,7 @@ export class SessionGrid {
     this.canvas = canvas;
     this.sessions = new Map(); // session_id -> { bit, subagents: Map }
     this.spacing = 4;
+    this.scheduler = null; // Set by main.js after construction
 
     this.initScene();
     this.initPostProcessing();
@@ -26,6 +27,13 @@ export class SessionGrid {
 
     // Handle resize
     window.addEventListener('resize', () => this.onResize());
+  }
+
+  /**
+   * Set the event scheduler reference for cleanup coordination
+   */
+  setScheduler(scheduler) {
+    this.scheduler = scheduler;
   }
 
   initScene() {
@@ -122,6 +130,11 @@ export class SessionGrid {
   }
 
   removeSession(sessionId) {
+    // Notify scheduler to clear any pending events for this session
+    if (this.scheduler) {
+      this.scheduler.clearSession(sessionId);
+    }
+
     // Check if it's a subagent
     for (const [parentId, session] of this.sessions) {
       if (session.subagents.has(sessionId)) {
@@ -137,8 +150,11 @@ export class SessionGrid {
     // Remove root session
     const session = this.sessions.get(sessionId);
     if (session) {
-      // Remove all subagents
+      // Remove all subagents and their pending events
       for (const [subId, subBit] of session.subagents) {
+        if (this.scheduler) {
+          this.scheduler.clearSession(subId);
+        }
         subBit.dispose();
       }
       session.subagents.clear();

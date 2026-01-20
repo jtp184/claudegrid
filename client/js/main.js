@@ -1,6 +1,7 @@
 import { SessionGrid } from './SessionGrid.js';
 import { EventLog } from './EventLog.js';
 import { AudioManager } from './AudioManager.js';
+import { EventScheduler } from './EventScheduler.js';
 
 class ClaudeGridApp {
   constructor() {
@@ -17,6 +18,8 @@ class ClaudeGridApp {
     this.controlsPanel = document.getElementById('controls');
 
     this.sessionGrid = new SessionGrid(this.canvas);
+    this.eventScheduler = new EventScheduler(this.sessionGrid);
+    this.sessionGrid.setScheduler(this.eventScheduler);
     this.eventLog = new EventLog(this.logContainer);
     this.audioManager = new AudioManager();
 
@@ -128,13 +131,13 @@ class ClaudeGridApp {
   }
 
   handleEvent(eventData) {
-    // Update visualization
-    this.sessionGrid.handleEvent(eventData);
+    // Route visualization through scheduler for animation smoothing
+    this.eventScheduler.enqueue(eventData);
 
-    // Log event
+    // Log event immediately (doesn't affect animations)
     this.eventLog.addEntry(eventData);
 
-    // Play sound
+    // Play sound immediately (feedback should be instant)
     this.playEventSound(eventData);
 
     // Update UI

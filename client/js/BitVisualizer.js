@@ -509,8 +509,22 @@ export class BitVisualizer {
     }
   }
 
-  pulse() {
-    this.pulseIntensity = 1.0;
+  pulse(intensity = 1.0) {
+    // Additive pulse - multiple rapid pulses combine instead of resetting
+    this.pulseIntensity = Math.min(1.5, this.pulseIntensity + intensity * 0.7);
+  }
+
+  /**
+   * Get current animation state for scheduler coordination
+   */
+  getAnimationState() {
+    return {
+      morphProgress: this.morphProgress,
+      isAnimating: this.morphProgress < 1,
+      pulseIntensity: this.pulseIntensity,
+      state: this.state,
+      targetState: this.targetState
+    };
   }
 
   setDimmed(dimmed) {
@@ -744,8 +758,15 @@ export class BitVisualizer {
     }
 
     // Interpolate colors
+    // For scale transitions, sync color change with geometry swap to prevent
+    // showing wrong geometry+color combinations (e.g., Octahedron with Cyan)
     if (this.sourceColor && this.targetColor) {
-      const lerpedColor = this.sourceColor.clone().lerp(this.targetColor, t);
+      let colorT = t;
+      if (this.useScaleTransition) {
+        // Keep source color during shrink phase (0-0.5), lerp during grow phase (0.5-1.0)
+        colorT = this.morphProgress < 0.5 ? 0 : (this.morphProgress - 0.5) * 2;
+      }
+      const lerpedColor = this.sourceColor.clone().lerp(this.targetColor, colorT);
       this.bitMaterial.uniforms.uColor.value.copy(lerpedColor);
       this.edgeMaterial.uniforms.uColor.value.copy(lerpedColor);
     }
