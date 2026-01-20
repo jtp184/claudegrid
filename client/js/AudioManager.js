@@ -7,20 +7,21 @@ export class AudioManager {
   constructor() {
     this.mode = 'response';
     this.initialized = false;
+    this.initializing = false;
     this.synth = null;
     this.noiseSynth = null;
     this.volume = 0.7; // 0-1 range
   }
 
   async init() {
-    if (this.initialized) return;
+    if (this.initialized || this.initializing) return;
+    this.initializing = true;
 
     try {
       // Dynamically import Tone.js (uses import map)
       const ToneModule = await import('tone');
       // esm.sh may export as default or named exports
       this.Tone = ToneModule.default || ToneModule;
-      console.log('Tone.js loaded:', Object.keys(this.Tone));
 
       // Create synths
       this.synth = new this.Tone.PolySynth(this.Tone.Synth, {
@@ -50,7 +51,6 @@ export class AudioManager {
 
       // Start audio context (requires user gesture)
       await this.Tone.start();
-      console.log('Tone.js audio context started');
 
       this.initialized = true;
 
@@ -58,6 +58,7 @@ export class AudioManager {
       this.setVolume(this.volume);
     } catch (err) {
       console.error('AudioManager init failed:', err);
+      this.initializing = false;
     }
   }
 
@@ -84,15 +85,13 @@ export class AudioManager {
     if (this.mode === 'response' && !AudioManager.RESPONSE_EVENTS.includes(eventType)) return;
 
     if (!this.initialized) {
-      console.log('AudioManager: initializing from play()');
+      if (this.initializing) return;  // Already initializing, skip this play
       await this.init();
       if (!this.initialized) {
-        console.warn('AudioManager: init failed, cannot play');
         return;
       }
     }
 
-    console.log('AudioManager: playing', eventType);
     const now = this.Tone.now();
 
     switch (eventType) {

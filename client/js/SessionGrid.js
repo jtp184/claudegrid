@@ -6,6 +6,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { BitVisualizer, States } from './BitVisualizer.js';
 import { HoverLabelManager } from './HoverLabelManager.js';
 
+// Configuration constants
+const CONFIG = {
+  DEBOUNCE_THRESHOLD: 0.001,  // position lerp threshold
+  SESSION_REMOVAL_DELAY: 2000, // ms after SessionEnd before removal
+  POSITION_LERP_SPEED: 4.0,
+  CAMERA_LERP_SPEED: 2.0,
+};
+
 export class SessionGrid {
   constructor(canvas) {
     this.canvas = canvas;
@@ -22,10 +30,10 @@ export class SessionGrid {
 
     // Camera smoothing
     this.targetCameraZ = 6;
-    this.cameraLerpSpeed = 2.0;
+    this.cameraLerpSpeed = CONFIG.CAMERA_LERP_SPEED;
 
     // Position smoothing for sessions
-    this.positionLerpSpeed = 4.0;
+    this.positionLerpSpeed = CONFIG.POSITION_LERP_SPEED;
 
     window.addEventListener('resize', () => this.onResize());
   }
@@ -175,7 +183,7 @@ export class SessionGrid {
 
   createSession(sessionId, parentId = null) {
     if (this.sessions.has(sessionId)) {
-      return this.sessions.get(sessionId);
+      return this.sessions.get(sessionId).bit;
     }
 
     const isSubagent = parentId !== null;
@@ -302,7 +310,7 @@ export class SessionGrid {
 
   lerpPosition(group, delta) {
     const userData = group.userData;
-    if (userData.targetX === undefined) return;
+    if (userData.targetX === undefined || userData.targetZ === undefined) return;
 
     const lerpFactor = Math.min(1, delta * this.positionLerpSpeed);
 
@@ -310,13 +318,13 @@ export class SessionGrid {
     const dz = userData.targetZ - group.position.z;
 
     // Only lerp if there's a significant difference
-    if (Math.abs(dx) > 0.001) {
+    if (Math.abs(dx) > CONFIG.DEBOUNCE_THRESHOLD) {
       group.position.x += dx * lerpFactor;
     } else {
       group.position.x = userData.targetX;
     }
 
-    if (Math.abs(dz) > 0.001) {
+    if (Math.abs(dz) > CONFIG.DEBOUNCE_THRESHOLD) {
       group.position.z += dz * lerpFactor;
     } else {
       group.position.z = userData.targetZ;
@@ -334,7 +342,7 @@ export class SessionGrid {
       const bit = this.getBit(session_id);
       if (bit) {
         bit.handleEvent(eventData);
-        setTimeout(() => this.removeSession(session_id), 2000);
+        setTimeout(() => this.removeSession(session_id), CONFIG.SESSION_REMOVAL_DELAY);
       }
       return;
     }
@@ -348,8 +356,8 @@ export class SessionGrid {
   }
 
   initFromSessions(sessions) {
-    // If server sends empty array but we have sessions, preserve them
-    // (server doesn't track session state, so empty init on reconnect shouldn't clear)
+    // Preserve existing sessions on reconnect - server is stateless and sends
+    // empty init. A future enhancement could add explicit session expiry.
     if (sessions.length === 0 && this.sessions.size > 0) {
       return;
     }

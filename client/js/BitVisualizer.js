@@ -30,6 +30,15 @@ const RotationSpeeds = {
   ending: 0.5
 };
 
+// Timing constants
+const TIMING = {
+  YES_REVERT_DELAY: 600,      // ms before reverting from YES to THINKING
+  COLOR_LERP_SPEED: 5,        // color transition speed
+  DIM_LERP_SPEED: 3,          // dim transition speed
+  MORPH_SPEED: 4,             // geometry morph speed
+  SCALE_LERP_SPEED: 8,        // tool bit scale animation speed
+};
+
 // Shader for Tron glow effect
 const bitVertexShader = `
   varying vec3 vNormal;
@@ -90,6 +99,9 @@ const edgeFragmentShader = `
 
 // Geometry cache
 const geometryCache = {};
+
+// Shared geometry for tool bits (prevents memory leak from creating new geometries)
+const toolBitGeometry = new THREE.IcosahedronGeometry(1, 0);
 
 function createStarburstGeometry(radius) {
   const geometry = new THREE.BufferGeometry();
@@ -248,7 +260,8 @@ class ToolBit {
   }
 
   createMesh() {
-    const geometry = new THREE.IcosahedronGeometry(1, 0);
+    // Use shared geometry to prevent memory leaks
+    const geometry = toolBitGeometry;
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {
@@ -322,7 +335,7 @@ class ToolBit {
     // Animate scale
     const scaleDiff = this.targetScale - this.currentScale;
     if (Math.abs(scaleDiff) > 0.001) {
-      this.currentScale += scaleDiff * Math.min(1, delta * 8);
+      this.currentScale += scaleDiff * Math.min(1, delta * TIMING.SCALE_LERP_SPEED);
     } else {
       this.currentScale = this.targetScale;
     }
@@ -360,7 +373,7 @@ class ToolBit {
   }
 
   dispose() {
-    this.mesh.geometry.dispose();
+    // Note: mesh geometry is shared (toolBitGeometry), don't dispose it
     this.material.dispose();
     this.edges.geometry.dispose();
     this.edgeMaterial.dispose();
@@ -379,7 +392,7 @@ export class BitVisualizer {
 
     // Scale transition state
     this.morphProgress = 1;
-    this.morphSpeed = 4;
+    this.morphSpeed = TIMING.MORPH_SPEED;
     this.pendingGeometry = null;
     this.geometrySwapped = false;
 
@@ -494,7 +507,7 @@ export class BitVisualizer {
           this.yesRevertTimer = setTimeout(() => {
             this.yesRevertTimer = null;
             this.setState(States.THINKING);
-          }, 600);
+          }, TIMING.YES_REVERT_DELAY);
         }
         break;
 
@@ -635,14 +648,14 @@ export class BitVisualizer {
     this.edgeMaterial.uniforms.uTime.value = elapsed;
 
     // Smooth color transition
-    this.currentColor.lerp(this.targetColor, delta * 5);
+    this.currentColor.lerp(this.targetColor, delta * TIMING.COLOR_LERP_SPEED);
     this.bitMaterial.uniforms.uColor.value.copy(this.currentColor);
     this.edgeMaterial.uniforms.uColor.value.copy(this.currentColor);
 
     // Smooth dim transition
     const dimDiff = this.targetDim - this.currentDim;
     if (Math.abs(dimDiff) > 0.01) {
-      this.currentDim += dimDiff * delta * 3;
+      this.currentDim += dimDiff * delta * TIMING.DIM_LERP_SPEED;
     } else {
       this.currentDim = this.targetDim;
     }
@@ -664,15 +677,19 @@ export class BitVisualizer {
     const bob = Math.sin(elapsed * 2) * 0.1;
     this.group.position.y = (this.group.userData.baseY ?? 0) + bob;
 
-    // Update tool bits
+    // Update tool bits - collect finished IDs to avoid modifying Map during iteration
+    const finishedToolBits = [];
     for (const [toolUseId, toolBit] of this.toolBits) {
       toolBit.update(delta, elapsed);
 
       if (toolBit.isFinished) {
         this.group.remove(toolBit.group);
         toolBit.dispose();
-        this.toolBits.delete(toolUseId);
+        finishedToolBits.push(toolUseId);
       }
+    }
+    for (const id of finishedToolBits) {
+      this.toolBits.delete(id);
     }
   }
 
@@ -692,7 +709,8 @@ export class BitVisualizer {
         this.bitGroup.remove(this.bitMesh);
         this.bitGroup.remove(this.bitEdges);
 
-        const geometry = this.pendingGeometry.clone();
+        // Use cached geometry directly (it's shared and immutable)
+        const geometry = this.pendingGeometry;
         this.bitMesh = new THREE.Mesh(geometry, this.bitMaterial);
         this.bitGroup.add(this.bitMesh);
 
