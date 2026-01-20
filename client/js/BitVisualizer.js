@@ -407,6 +407,10 @@ export class BitVisualizer {
     this.group = new THREE.Group();
     this.group.scale.setScalar(this.scale);
 
+    // Inner group for main bit mesh/edges - this gets scaled during morphs
+    this.bitGroup = new THREE.Group();
+    this.group.add(this.bitGroup);
+
     this.createBit();
   }
 
@@ -438,11 +442,11 @@ export class BitVisualizer {
     });
 
     this.bitMesh = new THREE.Mesh(geometry.clone(), this.bitMaterial);
-    this.group.add(this.bitMesh);
+    this.bitGroup.add(this.bitMesh);
 
     const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
     this.bitEdges = new THREE.LineSegments(edgesGeo, this.edgeMaterial);
-    this.group.add(this.bitEdges);
+    this.bitGroup.add(this.bitEdges);
   }
 
   /**
@@ -685,24 +689,25 @@ export class BitVisualizer {
     } else {
       if (!this.geometrySwapped && this.pendingGeometry) {
         this.geometrySwapped = true;
-        this.group.remove(this.bitMesh);
-        this.group.remove(this.bitEdges);
+        this.bitGroup.remove(this.bitMesh);
+        this.bitGroup.remove(this.bitEdges);
 
         const geometry = this.pendingGeometry.clone();
         this.bitMesh = new THREE.Mesh(geometry, this.bitMaterial);
-        this.group.add(this.bitMesh);
+        this.bitGroup.add(this.bitMesh);
 
         const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
         this.bitEdges = new THREE.LineSegments(edgesGeo, this.edgeMaterial);
-        this.group.add(this.bitEdges);
+        this.bitGroup.add(this.bitEdges);
       }
       morphScale = (this.morphProgress - 0.5) * 2;
     }
 
-    this.group.scale.setScalar(Math.max(0.01, morphScale) * this.scale);
+    // Only scale the inner bitGroup, not the tool bits
+    this.bitGroup.scale.setScalar(Math.max(0.01, morphScale));
 
     if (this.morphProgress >= 1) {
-      this.group.scale.setScalar(this.scale);
+      this.bitGroup.scale.setScalar(1);
     }
   }
 

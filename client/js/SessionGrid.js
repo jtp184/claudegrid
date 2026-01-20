@@ -223,14 +223,7 @@ export class SessionGrid {
   handleEvent(eventData) {
     const { session_id, hook_event_name, parent_session_id } = eventData;
 
-    // Create session on SessionStart
-    if (hook_event_name === 'SessionStart') {
-      const bit = this.createSession(session_id, parent_session_id);
-      bit.handleEvent(eventData);
-      return;
-    }
-
-    // Handle SessionEnd - shatter and schedule removal
+    // Handle SessionEnd - shatter and schedule removal (only if bit exists)
     if (hook_event_name === 'SessionEnd') {
       const bit = this.getBit(session_id);
       if (bit) {
@@ -240,14 +233,21 @@ export class SessionGrid {
       return;
     }
 
-    // Route all other events to the bit
-    const bit = this.getBit(session_id);
-    if (bit) {
-      bit.handleEvent(eventData);
+    // Get or create the bit for any other event
+    let bit = this.getBit(session_id);
+    if (!bit) {
+      bit = this.createSession(session_id, parent_session_id);
     }
+    bit.handleEvent(eventData);
   }
 
   initFromSessions(sessions) {
+    // If server sends empty array but we have sessions, preserve them
+    // (server doesn't track session state, so empty init on reconnect shouldn't clear)
+    if (sessions.length === 0 && this.sessions.size > 0) {
+      return;
+    }
+
     // Clear existing
     for (const session of this.sessions.values()) {
       this.scene.remove(session.bit.group);

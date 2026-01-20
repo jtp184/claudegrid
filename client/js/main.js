@@ -179,16 +179,20 @@ class ClaudeGridApp {
   }
 
   handleEvent(eventData) {
-    // Route visualization through debouncer
-    this.debouncer.enqueue(eventData);
+    try {
+      // Route visualization through debouncer
+      this.debouncer.enqueue(eventData);
 
-    // Log event immediately (doesn't affect animations)
-    this.eventLog.addEntry(eventData);
+      // Log event immediately (doesn't affect animations)
+      this.eventLog.addEntry(eventData);
 
-    // Play sound immediately (feedback should be instant)
-    this.playEventSound(eventData);
+      // Play sound immediately (feedback should be instant)
+      this.playEventSound(eventData);
+    } catch (err) {
+      console.error('Error processing event:', err);
+    }
 
-    // Update UI
+    // Always update UI (even if event processing failed)
     this.updateSessionCount();
   }
 
