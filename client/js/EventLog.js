@@ -23,7 +23,7 @@ export class EventLog {
   }
 
   createEntry(event) {
-    const { session_id, hook_event_name, tool_name, tool_use_blocked } = event;
+    const { session_id, hook_event_name, tool_name, tool_use_id, tool_use_blocked } = event;
     const hookEvent = hook_event_name || event.type || 'Unknown';
 
     const el = document.createElement('div');
@@ -41,6 +41,10 @@ export class EventLog {
     let details = '';
     if (tool_name) {
       details = `Tool: ${tool_name}`;
+      if (tool_use_id) {
+        const color = this.idToColor(tool_use_id);
+        details += ` <span style="color: ${color}">(${tool_use_id})</span>`;
+      }
     }
     if (tool_use_blocked) {
       details += ' [BLOCKED]';
@@ -84,6 +88,17 @@ export class EventLog {
       .replace(/([A-Z])/g, ' $1')
       .trim()
       .toUpperCase();
+  }
+
+  idToColor(id) {
+    // Hash the ID to generate a consistent hue
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = ((hash << 5) - hash) + id.charCodeAt(i);
+      hash |= 0;
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 70%, 65%)`;
   }
 
   clear() {
