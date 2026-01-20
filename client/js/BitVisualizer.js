@@ -647,6 +647,14 @@ export class BitVisualizer {
     });
   }
 
+  clearAllToolBits() {
+    for (const toolBit of this.toolBits.values()) {
+      if (!toolBit.isDespawning) {
+        toolBit.startDespawn();
+      }
+    }
+  }
+
   update(delta, elapsed) {
     if (this.isShattered) {
       this.updateShatter(delta);

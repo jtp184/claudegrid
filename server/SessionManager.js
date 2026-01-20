@@ -104,8 +104,9 @@ class SessionManager {
         if (session) {
           session.state = States.NEUTRAL;
           session.pendingPermissions.clear();
+          session.activeTools.clear();
           session.lastActivity = Date.now();
-          stateChange = { type: 'state', state: States.NEUTRAL };
+          stateChange = { type: 'state', state: States.NEUTRAL, clearTools: true };
         }
         break;
 

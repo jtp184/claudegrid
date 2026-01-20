@@ -243,6 +243,10 @@ export class SessionGrid {
           if (eventData.undim) {
             bit.setDimmed(false);
           }
+          // Clear all tool bits on stop events
+          if (eventData.clearTools) {
+            bit.clearAllToolBits();
+          }
         }
         break;
 
