@@ -482,6 +482,17 @@ export class BitVisualizer {
 
     if (newState === this.state && this.morphProgress >= 1) return;
 
+    // If already transitioning to this state, let animation continue
+    // but reset the auto-revert timer to extend the visible duration
+    if (newState === this.targetState && this.morphProgress < 1) {
+      if (autoRevert) {
+        this.revertTimeout = setTimeout(() => {
+          this.setState(autoRevert);
+        }, revertDelay);
+      }
+      return;
+    }
+
     // Track if session has done work
     if (newState === States.THINKING) {
       this.hasWorked = true;
