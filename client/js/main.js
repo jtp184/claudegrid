@@ -1,7 +1,50 @@
 import { SessionGrid } from './SessionGrid.js';
 import { EventLog } from './EventLog.js';
 import { AudioManager } from './AudioManager.js';
-import { EventScheduler } from './EventScheduler.js';
+
+/**
+ * SimpleDebouncer - Debounces events per session
+ * SessionStart/SessionEnd bypass debounce (immediate)
+ * All other events debounce 75ms, taking the latest
+ */
+class SimpleDebouncer {
+  constructor(handler, delay = 75) {
+    this.pending = new Map();
+    this.handler = handler;
+    this.delay = delay;
+  }
+
+  enqueue(event) {
+    const { session_id, hook_event_name } = event;
+
+    // Immediate: bypass debounce
+    if (['SessionStart', 'SessionEnd'].includes(hook_event_name)) {
+      this.flush(session_id);
+      this.handler(event);
+      return;
+    }
+
+    // Debounce: take latest
+    const existing = this.pending.get(session_id);
+    if (existing) clearTimeout(existing.timeout);
+
+    this.pending.set(session_id, {
+      event,
+      timeout: setTimeout(() => {
+        this.pending.delete(session_id);
+        this.handler(event);
+      }, this.delay)
+    });
+  }
+
+  flush(sessionId) {
+    const e = this.pending.get(sessionId);
+    if (e) {
+      clearTimeout(e.timeout);
+      this.pending.delete(sessionId);
+    }
+  }
+}
 
 class ClaudeGridApp {
   constructor() {
@@ -19,8 +62,7 @@ class ClaudeGridApp {
     this.controlsPanel = document.getElementById('controls');
 
     this.sessionGrid = new SessionGrid(this.canvas);
-    this.eventScheduler = new EventScheduler(this.sessionGrid);
-    this.sessionGrid.setScheduler(this.eventScheduler);
+    this.debouncer = new SimpleDebouncer((event) => this.sessionGrid.handleEvent(event));
     this.eventLog = new EventLog(this.logContainer);
     this.audioManager = new AudioManager();
 
@@ -59,7 +101,7 @@ class ClaudeGridApp {
     this.logToggle.addEventListener('click', () => {
       const isCollapsed = this.eventLogPanel.classList.toggle('collapsed');
       document.body.classList.toggle('log-collapsed', isCollapsed);
-      this.logToggle.textContent = isCollapsed ? '▶' : '◀';
+      this.logToggle.textContent = isCollapsed ? '>' : '<';
       // Trigger resize after CSS transition completes (300ms)
       setTimeout(() => this.sessionGrid.onResize(), 300);
     });
@@ -67,7 +109,7 @@ class ClaudeGridApp {
     this.controlsToggle.addEventListener('click', () => {
       const isCollapsed = this.controlsPanel.classList.toggle('collapsed');
       document.body.classList.toggle('controls-collapsed', isCollapsed);
-      this.controlsToggle.textContent = isCollapsed ? '▲' : '▼';
+      this.controlsToggle.textContent = isCollapsed ? '^' : 'v';
       // Trigger resize after CSS transition completes (300ms)
       setTimeout(() => this.sessionGrid.onResize(), 300);
     });
@@ -125,7 +167,7 @@ class ClaudeGridApp {
     const msgType = data.messageType || data.type;
     switch (msgType) {
       case 'init':
-        // Initialize with existing sessions
+        // Initialize with existing sessions (empty in simplified model)
         this.sessionGrid.initFromSessions(data.sessions || []);
         this.updateSessionCount();
         break;
@@ -137,8 +179,8 @@ class ClaudeGridApp {
   }
 
   handleEvent(eventData) {
-    // Route visualization through scheduler for animation smoothing
-    this.eventScheduler.enqueue(eventData);
+    // Route visualization through debouncer
+    this.debouncer.enqueue(eventData);
 
     // Log event immediately (doesn't affect animations)
     this.eventLog.addEntry(eventData);
@@ -151,11 +193,10 @@ class ClaudeGridApp {
   }
 
   playEventSound(eventData) {
-    const { event } = eventData;
-    const hookEvent = event?.hook_event_name;
+    const hookEvent = eventData.hook_event_name;
 
     if (hookEvent === 'PostToolUse') {
-      const success = !event.tool_use_blocked;
+      const success = !eventData.tool_use_blocked;
       this.audioManager.play(success ? 'PostToolUse_success' : 'PostToolUse_failure');
     } else if (hookEvent) {
       this.audioManager.play(hookEvent);

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 // Visual states
 export const States = {
   NEUTRAL: 'neutral',
+  IDLE: 'idle',
   THINKING: 'thinking',
   YES: 'yes',
   NO: 'no',
@@ -12,6 +13,7 @@ export const States = {
 // Colors for each state
 const StateColors = {
   neutral: new THREE.Color(0x44ddff),   // Cyan
+  idle: new THREE.Color(0x44ddff),      // Cyan (dimmed via shader)
   thinking: new THREE.Color(0x44ddff),  // Cyan (fast rotation)
   yes: new THREE.Color(0xffdd44),       // Yellow
   no: new THREE.Color(0xff4422),        // Orange
@@ -21,14 +23,12 @@ const StateColors = {
 // Rotation speeds
 const RotationSpeeds = {
   neutral: 0.5,
+  idle: 0.15,
   thinking: 3.0,
   yes: 1.0,
   no: 1.0,
   ending: 0.5
 };
-
-// Multiplier for rotation after session has done work
-const WORKED_ROTATION_MULTIPLIER = 2.0;
 
 // Shader for Tron glow effect
 const bitVertexShader = `
@@ -82,7 +82,6 @@ const edgeFragmentShader = `
 
   void main() {
     float pulse = 0.9 + 0.1 * sin(uTime * 4.0);
-    // Apply dimming to edges
     float dimFactor = 1.0 - uDim * 0.7;
     float dimmedPulse = mix(pulse, 0.95, uDim);
     gl_FragColor = vec4(uColor * 2.0 * dimmedPulse * dimFactor, 1.0);
@@ -152,8 +151,8 @@ function createStarburstGeometry(radius) {
 }
 
 function getGeometry(state) {
-  // Map thinking to neutral geometry
-  const geoState = state === States.THINKING ? States.NEUTRAL : state;
+  // Map states to geometry types
+  const geoState = (state === States.THINKING || state === States.IDLE) ? States.NEUTRAL : state;
 
   if (geometryCache[geoState]) {
     return geometryCache[geoState];
@@ -216,15 +215,11 @@ const toolBitFragmentShader = `
 `;
 
 class ToolBit {
-  constructor(toolUseId, toolName, orbitIndex = 0, totalTools = 1) {
+  constructor(toolUseId, toolName) {
     this.toolUseId = toolUseId;
     this.toolName = toolName;
-    this.orbitIndex = orbitIndex;
-    this.totalTools = totalTools;
-
     this.scale = 0.2;
 
-    // Each bit gets a unique orbital configuration based on its index
     // Use a seeded pseudo-random based on toolUseId for consistency
     const seed = this.hashCode(toolUseId);
     const rand = (offset) => {
@@ -233,13 +228,13 @@ class ToolBit {
     };
 
     // Vary orbit parameters for each bit
-    this.orbitRadius = 1.2 + rand(1) * 0.4;        // 1.2 to 1.6
-    this.orbitSpeed = 1.5 + rand(2) * 1.0;         // 1.5 to 2.5 rad/sec
-    this.orbitAngle = rand(3) * Math.PI * 2;       // Random starting angle
+    this.orbitRadius = 1.2 + rand(1) * 0.4;
+    this.orbitSpeed = 1.5 + rand(2) * 1.0;
+    this.orbitAngle = rand(3) * Math.PI * 2;
 
     // Orbital inclination - tilt the orbit plane
-    this.orbitInclination = (rand(4) - 0.5) * Math.PI * 0.6;  // -54° to +54° tilt
-    this.orbitAscendingNode = rand(5) * Math.PI * 2;          // Random orientation of tilt
+    this.orbitInclination = (rand(4) - 0.5) * Math.PI * 0.6;
+    this.orbitAscendingNode = rand(5) * Math.PI * 2;
 
     // Animation state
     this.currentScale = 0;
@@ -300,24 +295,17 @@ class ToolBit {
     this.edges = new THREE.LineSegments(edgesGeo, this.edgeMaterial);
     this.group.add(this.edges);
 
-    // Initial scale
     this.group.scale.setScalar(0.01);
   }
 
-  // Simple hash function for consistent pseudo-random values
   hashCode(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
+      hash = hash & hash;
     }
     return hash;
-  }
-
-  updateOrbitPosition(orbitIndex, totalTools) {
-    this.orbitIndex = orbitIndex;
-    this.totalTools = totalTools;
   }
 
   startDespawn() {
@@ -328,7 +316,6 @@ class ToolBit {
   update(delta, elapsed) {
     if (this.isFinished) return;
 
-    // Update shader time
     this.material.uniforms.uTime.value = elapsed;
     this.edgeMaterial.uniforms.uTime.value = elapsed;
 
@@ -354,26 +341,20 @@ class ToolBit {
     // Update orbit position
     this.orbitAngle += delta * this.orbitSpeed;
 
-    // Calculate position on tilted orbital plane
-    // Start with position in the flat orbital plane
     const flatX = Math.cos(this.orbitAngle) * this.orbitRadius;
     const flatZ = Math.sin(this.orbitAngle) * this.orbitRadius;
 
-    // Apply orbital inclination (tilt around the X axis)
     const inclinedY = flatZ * Math.sin(this.orbitInclination);
     const inclinedZ = flatZ * Math.cos(this.orbitInclination);
 
-    // Apply ascending node rotation (rotate the tilted plane around Y axis)
     const cosAN = Math.cos(this.orbitAscendingNode);
     const sinAN = Math.sin(this.orbitAscendingNode);
     this.group.position.x = flatX * cosAN - inclinedZ * sinAN;
     this.group.position.z = flatX * sinAN + inclinedZ * cosAN;
     this.group.position.y = inclinedY;
 
-    // Apply scale
     this.group.scale.setScalar(Math.max(0.01, this.currentScale));
 
-    // Spin on own axis
     this.group.rotation.y += delta * 3;
     this.group.rotation.x += delta * 2;
   }
@@ -391,36 +372,31 @@ export class BitVisualizer {
     this.sessionId = sessionId;
     this.isSubagent = isSubagent;
     this.state = States.NEUTRAL;
-    this.targetState = States.NEUTRAL;
     this.scale = isSubagent ? 0.4 : 1.0;
 
-    // Track if session has done work (entered THINKING state)
+    // Track if session has done work
     this.hasWorked = false;
 
-    // Morphing state
+    // Scale transition state
     this.morphProgress = 1;
-    this.morphSpeed = 3;
-    this.sourceColor = null;
-    this.targetColor = null;
-    this.useScaleTransition = false;
-    this.geometrySwapped = false;
+    this.morphSpeed = 4;
     this.pendingGeometry = null;
+    this.geometrySwapped = false;
 
-    // Pulse effect
-    this.pulseIntensity = 0;
+    // Current/target color for smooth transitions
+    this.currentColor = StateColors.neutral.clone();
+    this.targetColor = StateColors.neutral.clone();
 
-    // Dimming state (for idle)
-    this.isDimmed = false;
+    // Dimming state
     this.currentDim = 0;
     this.targetDim = 0;
-    this.dimSpeed = 2; // How fast to transition dim
 
     // Shatter particles
     this.shatterParticles = null;
     this.isShattered = false;
 
-    // Auto-revert timer
-    this.revertTimeout = null;
+    // YES revert timer
+    this.yesRevertTimer = null;
 
     // Event data for hover labels
     this.eventData = null;
@@ -437,7 +413,6 @@ export class BitVisualizer {
   createBit() {
     const geometry = getGeometry(States.NEUTRAL);
 
-    // Main mesh material
     this.bitMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uColor: { value: StateColors.neutral.clone() },
@@ -452,7 +427,6 @@ export class BitVisualizer {
       depthWrite: false
     });
 
-    // Edge material
     this.edgeMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uColor: { value: StateColors.neutral.clone() },
@@ -471,157 +445,115 @@ export class BitVisualizer {
     this.group.add(this.bitEdges);
   }
 
-  setState(newState, autoRevert = null, revertDelay = 1500) {
-    if (this.isShattered) return;
+  /**
+   * Main event handler - implements the state machine
+   */
+  handleEvent(event) {
+    const { hook_event_name, tool_use_id, tool_name, tool_use_blocked, notification_type } = event;
 
-    // Clear any pending revert
-    if (this.revertTimeout) {
-      clearTimeout(this.revertTimeout);
-      this.revertTimeout = null;
+    // Clear YES revert timer on any new event
+    if (this.yesRevertTimer) {
+      clearTimeout(this.yesRevertTimer);
+      this.yesRevertTimer = null;
     }
 
-    // If already in this state with morph complete, just set up auto-revert if needed
-    // This fixes the bug where multiple tool completions in quick succession would
-    // clear the first revert timer but never set a new one
-    if (newState === this.state && this.morphProgress >= 1) {
-      if (autoRevert) {
-        this.revertTimeout = setTimeout(() => {
-          this.setState(autoRevert);
-        }, revertDelay);
-      }
-      return;
-    }
+    switch (hook_event_name) {
+      case 'SessionStart':
+        this.setState(States.NEUTRAL);
+        break;
 
-    // If already transitioning to this state, let animation continue
-    // but reset the auto-revert timer to extend the visible duration
-    if (newState === this.targetState && this.morphProgress < 1) {
-      if (autoRevert) {
-        this.revertTimeout = setTimeout(() => {
-          this.setState(autoRevert);
-        }, revertDelay);
-      }
-      return;
-    }
-
-    // Track if session has done work
-    if (newState === States.THINKING) {
-      this.hasWorked = true;
-    }
-
-    // Clear tool-related event data when reverting to neutral/thinking
-    if ((newState === States.NEUTRAL || newState === States.THINKING) && this.eventData) {
-      this.eventData.tool_name = null;
-      this.eventData.tool_input = null;
-      this.eventData.message = null;
-    }
-
-    // Despawn all orbiting tool bits when entering NO state
-    if (newState === States.NO) {
-      for (const toolBit of this.toolBits.values()) {
-        if (!toolBit.isDespawning) {
-          toolBit.startDespawn();
+      case 'Notification':
+        if (notification_type === 'idle_prompt') {
+          this.setDimmed(true);
+          this.setState(States.IDLE);
+        } else {
+          this.setState(States.NO);
         }
-      }
+        break;
+
+      case 'UserPromptSubmit':
+        this.setDimmed(false);
+        this.hasWorked = true;
+        this.setState(States.THINKING);
+        break;
+
+      case 'PreToolUse':
+        this.addToolBit(tool_use_id, tool_name);
+        break;
+
+      case 'PostToolUse':
+        this.removeToolBit(tool_use_id);
+        if (tool_use_blocked) {
+          this.setState(States.NO);
+        } else {
+          this.setState(States.YES);
+          this.yesRevertTimer = setTimeout(() => {
+            this.yesRevertTimer = null;
+            this.setState(States.THINKING);
+          }, 300);
+        }
+        break;
+
+      case 'PermissionRequest':
+        this.setState(States.NO);
+        break;
+
+      case 'Stop':
+      case 'SubagentStop':
+        this.clearAllToolBits();
+        this.setState(States.NEUTRAL);
+        break;
+
+      case 'SessionEnd':
+        this.shatter();
+        break;
     }
 
-    // Use targetState if mid-morph, since that's what geometry is transitioning toward
-    const effectiveCurrentState = this.morphProgress < 1 ? this.targetState : this.state;
+    this.setEventData(event);
+  }
 
-    this.targetState = newState;
-    this.sourceColor = this.getCurrentColor().clone();
+  setState(newState) {
+    if (this.isShattered) return;
+    if (newState === this.state && this.morphProgress >= 1) return;
+
+    const oldGeoState = this.getGeoState(this.state);
+    const newGeoState = this.getGeoState(newState);
+
+    this.state = newState;
     this.targetColor = StateColors[newState].clone();
-
-    const currentGeoState = effectiveCurrentState === States.THINKING ? States.NEUTRAL : effectiveCurrentState;
-    const targetGeoState = newState === States.THINKING ? States.NEUTRAL : newState;
+    this.targetDim = newState === States.IDLE ? 1 : 0;
 
     // Check if geometry needs to change
-    if (currentGeoState !== targetGeoState) {
-      const sourcePositions = this.bitMesh.geometry.attributes.position;
-      const targetGeo = getGeometry(newState);
-      const targetPositions = targetGeo.attributes.position;
-
-      if (sourcePositions.count !== targetPositions.count) {
-        this.useScaleTransition = true;
-        this.geometrySwapped = false;
-        this.pendingGeometry = targetGeo;
-      } else {
-        this.useScaleTransition = false;
-        this.sourcePositions = new Float32Array(sourcePositions.array);
-        this.targetPositions = new Float32Array(targetPositions.array);
-      }
-    } else {
-      this.useScaleTransition = false;
-    }
-
-    this.morphProgress = 0;
-
-    // Set up auto-revert if specified
-    if (autoRevert) {
-      this.revertTimeout = setTimeout(() => {
-        this.setState(autoRevert);
-      }, revertDelay);
+    if (oldGeoState !== newGeoState) {
+      this.pendingGeometry = getGeometry(newState);
+      this.geometrySwapped = false;
+      this.morphProgress = 0;
     }
   }
 
-  pulse(intensity = 1.0) {
-    // Additive pulse - multiple rapid pulses combine instead of resetting
-    this.pulseIntensity = Math.min(1.5, this.pulseIntensity + intensity * 0.7);
-  }
-
-  /**
-   * Get current animation state for scheduler coordination
-   */
-  getAnimationState() {
-    let hasSpawningTools = false;
-    let hasDespawningTools = false;
-
-    for (const toolBit of this.toolBits.values()) {
-      if (!toolBit.isDespawning && Math.abs(toolBit.currentScale - toolBit.targetScale) > 0.01) {
-        hasSpawningTools = true;
-      }
-      if (toolBit.isDespawning && !toolBit.isFinished) {
-        hasDespawningTools = true;
-      }
-    }
-
-    return {
-      morphProgress: this.morphProgress,
-      isMorphing: this.morphProgress < 1,
-      hasSpawningTools,
-      hasDespawningTools,
-      isAnimating: this.morphProgress < 1 || hasSpawningTools || hasDespawningTools,
-      state: this.state,
-      targetState: this.targetState
-    };
+  getGeoState(state) {
+    if (state === States.THINKING || state === States.IDLE) return States.NEUTRAL;
+    return state;
   }
 
   setDimmed(dimmed) {
-    this.isDimmed = dimmed;
     this.targetDim = dimmed ? 1 : 0;
   }
 
-  setEventData(eventData) {
-    if (eventData?.event) {
-      const e = eventData.event;
-      this.eventData = {
-        cwd: e.cwd,
-        tool_name: e.tool_name,
-        tool_input: e.tool_input,
-        message: e.message,
-        hook_event_name: e.hook_event_name
-      };
-    }
-  }
-
-  getCurrentColor() {
-    return this.bitMaterial.uniforms.uColor.value;
+  setEventData(event) {
+    this.eventData = {
+      cwd: event.cwd,
+      tool_name: event.tool_name,
+      tool_input: event.tool_input,
+      message: event.message,
+      hook_event_name: event.hook_event_name
+    };
   }
 
   shatter() {
     if (this.isShattered) return;
     this.isShattered = true;
 
-    // Get current positions
     const positions = this.bitMesh.geometry.attributes.position.array;
     const particleCount = positions.length / 3;
 
@@ -634,7 +566,6 @@ export class BitVisualizer {
       particlePositions[i + 1] = positions[i + 1];
       particlePositions[i + 2] = positions[i + 2];
 
-      // Random outward velocity
       const dir = new THREE.Vector3(
         positions[i],
         positions[i + 1],
@@ -651,7 +582,7 @@ export class BitVisualizer {
     particleGeo.setAttribute('position', new THREE.Float32BufferAttribute(particlePositions, 3));
 
     const particleMat = new THREE.PointsMaterial({
-      color: this.getCurrentColor(),
+      color: this.currentColor,
       size: 0.1,
       transparent: true,
       opacity: 1
@@ -661,7 +592,6 @@ export class BitVisualizer {
     this.shatterParticles.userData.velocities = velocities;
     this.shatterParticles.userData.startTime = Date.now();
 
-    // Hide original mesh
     this.bitMesh.visible = false;
     this.bitEdges.visible = false;
 
@@ -670,38 +600,17 @@ export class BitVisualizer {
 
   addToolBit(toolUseId, toolName) {
     if (this.toolBits.has(toolUseId)) return;
-    // Don't add orbiting bits during NO state
-    if (this.state === States.NO || this.targetState === States.NO) return;
+    if (this.state === States.NO) return;
 
-    const totalTools = this.toolBits.size + 1;
-    const toolBit = new ToolBit(toolUseId, toolName, this.toolBits.size, totalTools);
+    const toolBit = new ToolBit(toolUseId, toolName);
     this.toolBits.set(toolUseId, toolBit);
     this.group.add(toolBit.group);
-
-    // Update orbit positions for all tool bits to distribute evenly
-    this.updateToolBitOrbits();
   }
 
   removeToolBit(toolUseId) {
     const toolBit = this.toolBits.get(toolUseId);
     if (!toolBit) return;
-
     toolBit.startDespawn();
-    // Update orbit positions for remaining active tools
-    this.updateToolBitOrbits();
-
-    // Flash YES briefly to indicate tool completion, then revert to THINKING
-    this.setState(States.YES, States.THINKING, 400);
-  }
-
-  updateToolBitOrbits() {
-    // Count only non-despawning tool bits for distribution
-    const activeTools = Array.from(this.toolBits.values()).filter(tb => !tb.isDespawning);
-    const totalActive = activeTools.length;
-
-    activeTools.forEach((toolBit, index) => {
-      toolBit.updateOrbitPosition(index, totalActive);
-    });
   }
 
   clearAllToolBits() {
@@ -718,56 +627,43 @@ export class BitVisualizer {
       return;
     }
 
-    // Update shader time
     this.bitMaterial.uniforms.uTime.value = elapsed;
     this.edgeMaterial.uniforms.uTime.value = elapsed;
 
-    // Update dimming smoothly
-    if (this.currentDim !== this.targetDim) {
-      const dimDiff = this.targetDim - this.currentDim;
-      this.currentDim += dimDiff * Math.min(1, delta * this.dimSpeed);
-      if (Math.abs(dimDiff) < 0.01) {
-        this.currentDim = this.targetDim;
-      }
-      this.bitMaterial.uniforms.uDim.value = this.currentDim;
-      this.edgeMaterial.uniforms.uDim.value = this.currentDim;
-    }
+    // Smooth color transition
+    this.currentColor.lerp(this.targetColor, delta * 5);
+    this.bitMaterial.uniforms.uColor.value.copy(this.currentColor);
+    this.edgeMaterial.uniforms.uColor.value.copy(this.currentColor);
 
-    // Update morphing
+    // Smooth dim transition
+    const dimDiff = this.targetDim - this.currentDim;
+    if (Math.abs(dimDiff) > 0.01) {
+      this.currentDim += dimDiff * delta * 3;
+    } else {
+      this.currentDim = this.targetDim;
+    }
+    this.bitMaterial.uniforms.uDim.value = this.currentDim;
+    this.edgeMaterial.uniforms.uDim.value = this.currentDim;
+
+    // Update scale morph (geometry swap at midpoint)
     this.updateMorph(delta);
 
-    // Rotation based on state (faster if session has worked, slower if dimmed)
-    let rotSpeed = RotationSpeeds[this.state] || 1.0;
-    if (this.hasWorked && this.state !== States.THINKING) {
-      rotSpeed *= WORKED_ROTATION_MULTIPLIER;
+    // Rotation based on state
+    let rotSpeed = RotationSpeeds[this.state] || 0.5;
+    if (this.hasWorked && this.state === States.NEUTRAL) {
+      rotSpeed *= 2.0;
     }
-    // Slow rotation when dimmed
-    rotSpeed *= (1 - this.currentDim * 0.7);
     this.group.rotation.y += delta * rotSpeed;
     this.group.rotation.x = Math.sin(elapsed * 0.3) * 0.1;
 
     // Bobbing motion
     const bob = Math.sin(elapsed * 2) * 0.1;
-    this.group.position.y = this.group.userData.baseY !== undefined
-      ? this.group.userData.baseY + bob
-      : bob;
-
-    // Pulse effect decay
-    if (this.pulseIntensity > 0) {
-      this.pulseIntensity -= delta * 3;
-      if (this.pulseIntensity < 0) this.pulseIntensity = 0;
-
-      const pulseScale = this.scale * (1 + this.pulseIntensity * 0.3);
-      this.group.scale.setScalar(pulseScale);
-    } else if (this.morphProgress >= 1) {
-      this.group.scale.setScalar(this.scale);
-    }
+    this.group.position.y = (this.group.userData.baseY ?? 0) + bob;
 
     // Update tool bits
     for (const [toolUseId, toolBit] of this.toolBits) {
       toolBit.update(delta, elapsed);
 
-      // Clean up finished tool bits
       if (toolBit.isFinished) {
         this.group.remove(toolBit.group);
         toolBit.dispose();
@@ -782,67 +678,31 @@ export class BitVisualizer {
     this.morphProgress += delta * this.morphSpeed;
     if (this.morphProgress > 1) this.morphProgress = 1;
 
-    // Smooth easing
-    const t = this.morphProgress < 0.5
-      ? 4 * this.morphProgress * this.morphProgress * this.morphProgress
-      : 1 - Math.pow(-2 * this.morphProgress + 2, 3) / 2;
+    // Scale down, swap geometry at midpoint, scale up
+    let morphScale;
+    if (this.morphProgress < 0.5) {
+      morphScale = 1 - this.morphProgress * 2;
+    } else {
+      if (!this.geometrySwapped && this.pendingGeometry) {
+        this.geometrySwapped = true;
+        this.group.remove(this.bitMesh);
+        this.group.remove(this.bitEdges);
 
-    if (this.useScaleTransition) {
-      let morphScale;
-      if (this.morphProgress < 0.5) {
-        morphScale = 1 - (t * 2);
-      } else {
-        if (!this.geometrySwapped) {
-          this.geometrySwapped = true;
-          this.group.remove(this.bitMesh);
-          this.group.remove(this.bitEdges);
+        const geometry = this.pendingGeometry.clone();
+        this.bitMesh = new THREE.Mesh(geometry, this.bitMaterial);
+        this.group.add(this.bitMesh);
 
-          const geometry = this.pendingGeometry.clone();
-          this.bitMesh = new THREE.Mesh(geometry, this.bitMaterial);
-          this.group.add(this.bitMesh);
-
-          const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
-          this.bitEdges = new THREE.LineSegments(edgesGeo, this.edgeMaterial);
-          this.group.add(this.bitEdges);
-        }
-        morphScale = (t - 0.5) * 2;
+        const edgesGeo = new THREE.EdgesGeometry(geometry, 15);
+        this.bitEdges = new THREE.LineSegments(edgesGeo, this.edgeMaterial);
+        this.group.add(this.bitEdges);
       }
-      this.group.scale.setScalar(Math.max(0.01, morphScale) * this.scale);
-    } else if (this.sourcePositions && this.targetPositions) {
-      const pos = this.bitMesh.geometry.attributes.position;
-      for (let i = 0; i < pos.array.length; i++) {
-        pos.array[i] = this.sourcePositions[i] + (this.targetPositions[i] - this.sourcePositions[i]) * t;
-      }
-      pos.needsUpdate = true;
-      this.bitMesh.geometry.computeVertexNormals();
-
-      this.group.remove(this.bitEdges);
-      const edgesGeo = new THREE.EdgesGeometry(this.bitMesh.geometry, 15);
-      this.bitEdges = new THREE.LineSegments(edgesGeo, this.edgeMaterial);
-      this.group.add(this.bitEdges);
+      morphScale = (this.morphProgress - 0.5) * 2;
     }
 
-    // Interpolate colors
-    // For scale transitions, sync color change with geometry swap to prevent
-    // showing wrong geometry+color combinations (e.g., Octahedron with Cyan)
-    if (this.sourceColor && this.targetColor) {
-      let colorT = t;
-      if (this.useScaleTransition) {
-        // Keep source color during shrink phase (0-0.5), lerp during grow phase (0.5-1.0)
-        colorT = this.morphProgress < 0.5 ? 0 : (this.morphProgress - 0.5) * 2;
-      }
-      const lerpedColor = this.sourceColor.clone().lerp(this.targetColor, colorT);
-      this.bitMaterial.uniforms.uColor.value.copy(lerpedColor);
-      this.edgeMaterial.uniforms.uColor.value.copy(lerpedColor);
-    }
+    this.group.scale.setScalar(Math.max(0.01, morphScale) * this.scale);
 
     if (this.morphProgress >= 1) {
-      this.state = this.targetState;
-      this.bitMaterial.uniforms.uColor.value.copy(StateColors[this.state]);
-      this.edgeMaterial.uniforms.uColor.value.copy(StateColors[this.state]);
-      if (this.useScaleTransition) {
-        this.group.scale.setScalar(this.scale);
-      }
+      this.group.scale.setScalar(this.scale);
     }
   }
 
@@ -859,13 +719,10 @@ export class BitVisualizer {
       positions[idx + 1] += velocities[i].y * delta;
       positions[idx + 2] += velocities[i].z * delta;
 
-      // Apply gravity
       velocities[i].y -= delta * 2;
     }
 
     this.shatterParticles.geometry.attributes.position.needsUpdate = true;
-
-    // Fade out
     this.shatterParticles.material.opacity = Math.max(0, 1 - elapsed);
   }
 
@@ -876,8 +733,8 @@ export class BitVisualizer {
   }
 
   dispose() {
-    if (this.revertTimeout) {
-      clearTimeout(this.revertTimeout);
+    if (this.yesRevertTimer) {
+      clearTimeout(this.yesRevertTimer);
     }
 
     this.bitMesh.geometry.dispose();
@@ -890,7 +747,6 @@ export class BitVisualizer {
       this.shatterParticles.material.dispose();
     }
 
-    // Clean up tool bits
     for (const toolBit of this.toolBits.values()) {
       this.group.remove(toolBit.group);
       toolBit.dispose();

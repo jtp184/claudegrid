@@ -11,13 +11,11 @@ export class SessionGrid {
     this.canvas = canvas;
     this.sessions = new Map(); // session_id -> { bit, subagents: Map }
     this.spacing = 4;
-    this.scheduler = null; // Set by main.js after construction
 
     this.initScene();
     this.initPostProcessing();
     this.initBackground();
 
-    // Initialize hover label manager
     this.hoverLabelManager = new HoverLabelManager(this.canvas, this.camera);
 
     this.clock = new THREE.Clock();
@@ -26,15 +24,7 @@ export class SessionGrid {
     this.targetCameraZ = 6;
     this.cameraLerpSpeed = 2.0;
 
-    // Handle resize
     window.addEventListener('resize', () => this.onResize());
-  }
-
-  /**
-   * Set the event scheduler reference for cleanup coordination
-   */
-  setScheduler(scheduler) {
-    this.scheduler = scheduler;
   }
 
   initScene() {
@@ -57,27 +47,22 @@ export class SessionGrid {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
 
-    // Initialize OrbitControls
     this.controls = new OrbitControls(this.camera, this.canvas);
 
-    // Configure for right-click rotation
     this.controls.mouseButtons = {
-      LEFT: null,                    // Reserved for selection
-      MIDDLE: THREE.MOUSE.DOLLY,     // Zoom
-      RIGHT: THREE.MOUSE.ROTATE      // Rotation
+      LEFT: null,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE
     };
 
-    // Smooth damping
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
 
-    // Disable panning, enable zoom with limits
     this.controls.enablePan = false;
     this.controls.enableZoom = true;
     this.controls.minDistance = 3;
     this.controls.maxDistance = 50;
 
-    // Orbit around scene center, limit vertical rotation
     this.controls.target.set(0, 0, 0);
     this.controls.maxPolarAngle = Math.PI * 0.85;
     this.controls.minPolarAngle = Math.PI * 0.15;
@@ -91,20 +76,18 @@ export class SessionGrid {
 
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(rect.width, rect.height),
-      1.5,  // strength
-      0.4,  // radius
-      0.85  // threshold
+      1.5,
+      0.4,
+      0.85
     );
     this.composer.addPass(this.bloomPass);
   }
 
   initBackground() {
-    // Grid helper
     const gridHelper = new THREE.GridHelper(30, 60, 0x004466, 0x002233);
     gridHelper.position.y = -3;
     this.scene.add(gridHelper);
 
-    // Ambient particles
     const particleCount = 150;
     const particlesGeo = new THREE.BufferGeometry();
     const particlePos = new Float32Array(particleCount * 3);
@@ -135,15 +118,12 @@ export class SessionGrid {
     const bit = new BitVisualizer(sessionId, isSubagent);
 
     if (isSubagent && this.sessions.has(parentId)) {
-      // Add as subagent to parent
       const parent = this.sessions.get(parentId);
       parent.subagents.set(sessionId, bit);
       parent.bit.group.add(bit.group);
 
-      // Position in orbit around parent
       this.updateSubagentPositions(parentId);
     } else {
-      // Add as root session
       this.sessions.set(sessionId, {
         bit,
         subagents: new Map()
@@ -156,11 +136,6 @@ export class SessionGrid {
   }
 
   removeSession(sessionId) {
-    // Notify scheduler to clear any pending events for this session
-    if (this.scheduler) {
-      this.scheduler.clearSession(sessionId);
-    }
-
     // Check if it's a subagent
     for (const [parentId, session] of this.sessions) {
       if (session.subagents.has(sessionId)) {
@@ -176,11 +151,7 @@ export class SessionGrid {
     // Remove root session
     const session = this.sessions.get(sessionId);
     if (session) {
-      // Remove all subagents and their pending events
       for (const [subId, subBit] of session.subagents) {
-        if (this.scheduler) {
-          this.scheduler.clearSession(subId);
-        }
         subBit.dispose();
       }
       session.subagents.clear();
@@ -192,7 +163,7 @@ export class SessionGrid {
     }
   }
 
-  getSession(sessionId) {
+  getBit(sessionId) {
     // Check root sessions
     if (this.sessions.has(sessionId)) {
       return this.sessions.get(sessionId).bit;
@@ -212,7 +183,6 @@ export class SessionGrid {
     const count = this.sessions.size;
     if (count === 0) return;
 
-    // Arrange all bits in a horizontal line (same z position)
     let i = 0;
     for (const session of this.sessions.values()) {
       const x = (i - (count - 1) / 2) * this.spacing;
@@ -224,7 +194,6 @@ export class SessionGrid {
       i++;
     }
 
-    // Adjust camera distance based on session count
     const width = (count - 1) * this.spacing;
     this.targetCameraZ = Math.max(6, 4 + width * 0.5);
   }
@@ -243,78 +212,39 @@ export class SessionGrid {
       const angle = (i / count) * Math.PI * 2;
       bit.group.position.x = Math.cos(angle) * orbitRadius;
       bit.group.position.z = Math.sin(angle) * orbitRadius;
-      bit.group.position.y = 0.5; // Slightly above parent
+      bit.group.position.y = 0.5;
       bit.group.userData.baseY = 0.5;
     });
   }
 
+  /**
+   * Handle incoming event - routes to appropriate bit
+   */
   handleEvent(eventData) {
-    const { session_id, type, state, event } = eventData;
+    const { session_id, hook_event_name, parent_session_id } = eventData;
 
-    let bit = this.getSession(session_id);
-
-    switch (type) {
-      case 'create':
-        const parentId = event?.parent_session_id || null;
-        bit = this.createSession(session_id, parentId);
-        bit.setState(state);
-        bit.setEventData(eventData);
-        break;
-
-      case 'state':
-        if (bit) {
-          bit.setState(state, eventData.autoRevert, eventData.revertDelay);
-          bit.setEventData(eventData);
-          // Clear dimming if undim flag is set (activity resumed)
-          if (eventData.undim) {
-            bit.setDimmed(false);
-          }
-          // Clear all tool bits on stop events
-          if (eventData.clearTools) {
-            bit.clearAllToolBits();
-          }
-        }
-        break;
-
-      case 'pulse':
-        if (bit) {
-          bit.pulse();
-          bit.setEventData(eventData);
-        }
-        break;
-
-      case 'tool_start':
-        if (bit) {
-          bit.addToolBit(eventData.tool_use_id, eventData.tool_name);
-          bit.pulse();
-          bit.setEventData(eventData);
-        }
-        break;
-
-      case 'tool_end':
-        if (bit) {
-          bit.removeToolBit(eventData.tool_use_id);
-          bit.setEventData(eventData);
-          // State is now managed by BitVisualizer based on tool count
-        }
-        break;
-
-      case 'dim':
-        if (bit) {
-          bit.setDimmed(eventData.dimmed);
-        }
-        break;
-
-      case 'end':
-        if (bit) {
-          bit.shatter();
-          // Session will be removed after shatter animation
-          setTimeout(() => this.removeSession(session_id), 2000);
-        }
-        break;
+    // Create session on SessionStart
+    if (hook_event_name === 'SessionStart') {
+      const bit = this.createSession(session_id, parent_session_id);
+      bit.handleEvent(eventData);
+      return;
     }
 
-    return bit;
+    // Handle SessionEnd - shatter and schedule removal
+    if (hook_event_name === 'SessionEnd') {
+      const bit = this.getBit(session_id);
+      if (bit) {
+        bit.handleEvent(eventData);
+        setTimeout(() => this.removeSession(session_id), 2000);
+      }
+      return;
+    }
+
+    // Route all other events to the bit
+    const bit = this.getBit(session_id);
+    if (bit) {
+      bit.handleEvent(eventData);
+    }
   }
 
   initFromSessions(sessions) {
@@ -325,52 +255,19 @@ export class SessionGrid {
     }
     this.sessions.clear();
 
-    // Create from tree structure
+    // Create from tree structure (if server sends state)
     for (const session of sessions) {
       const bit = this.createSession(session.id);
 
-      // Apply state from server
-      if (session.state) {
-        if (session.state !== 'neutral' && session.state !== 'ending') {
-          bit.hasWorked = true;  // Assume worked if not neutral
-        }
-        if (session.state !== 'neutral') {
-          bit.setState(session.state);
-        }
-      }
-
-      // Apply dimmed state from server
-      if (session.isDimmed) {
-        bit.setDimmed(true);
-      }
-
-      // Restore active tools from server
-      if (session.activeTools && session.activeTools.length > 0) {
-        for (const tool of session.activeTools) {
-          bit.addToolBit(tool.tool_use_id, tool.tool_name);
-        }
+      if (session.state && session.state !== 'neutral') {
+        bit.hasWorked = true;
       }
 
       if (session.subagents) {
         for (const subagent of session.subagents) {
           const subBit = this.createSession(subagent.id, session.id);
-          if (subagent.state) {
-            if (subagent.state !== 'neutral' && subagent.state !== 'ending') {
-              subBit.hasWorked = true;
-            }
-            if (subagent.state !== 'neutral') {
-              subBit.setState(subagent.state);
-            }
-          }
-          // Apply dimmed state from server
-          if (subagent.isDimmed) {
-            subBit.setDimmed(true);
-          }
-          // Restore active tools from server
-          if (subagent.activeTools && subagent.activeTools.length > 0) {
-            for (const tool of subagent.activeTools) {
-              subBit.addToolBit(tool.tool_use_id, tool.tool_name);
-            }
+          if (subagent.state && subagent.state !== 'neutral') {
+            subBit.hasWorked = true;
           }
         }
       }
@@ -389,10 +286,9 @@ export class SessionGrid {
     const delta = this.clock.getDelta();
     const elapsed = this.clock.getElapsedTime();
 
-    // Update OrbitControls for damping
     this.controls.update();
 
-    // Auto-zoom based on session count (respects current view angle)
+    // Auto-zoom based on session count
     const currentDistance = this.camera.position.distanceTo(this.controls.target);
     const distanceDiff = this.targetCameraZ - currentDistance;
 
@@ -408,21 +304,17 @@ export class SessionGrid {
     for (const session of this.sessions.values()) {
       session.bit.update(delta, elapsed);
 
-      // Update subagent orbits
       for (const subBit of session.subagents.values()) {
         subBit.update(delta, elapsed);
       }
     }
 
-    // Slowly rotate particles
     if (this.particles) {
       this.particles.rotation.y += delta * 0.02;
     }
 
-    // Update hover labels
     this.hoverLabelManager.update(this.sessions);
 
-    // Render with post-processing
     this.composer.render();
   }
 

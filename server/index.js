@@ -2,13 +2,11 @@ const http = require('http');
 const path = require('path');
 const express = require('express');
 const { WebSocketServer } = require('ws');
-const { SessionManager } = require('./SessionManager.js');
 
 function createServer() {
   const app = express();
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws' });
-  const sessionManager = new SessionManager();
 
   // Middleware
   app.use(express.json());
@@ -24,12 +22,8 @@ function createServer() {
     clients.add(ws);
     console.log(`WebSocket client connected (total: ${clients.size})`);
 
-    // Send current session state to new client
-    const sessions = sessionManager.getSessionTree();
-    ws.send(JSON.stringify({
-      messageType: 'init',
-      sessions
-    }));
+    // Send init (clients rebuild state from events)
+    ws.send(JSON.stringify({ messageType: 'init', sessions: [] }));
 
     ws.on('close', () => {
       clients.delete(ws);
@@ -52,38 +46,16 @@ function createServer() {
     }
   }
 
-  // API endpoint for hooks
+  // API endpoint for hooks - pass through raw events
   app.post('/api/events', (req, res) => {
     const event = req.body;
-
-    // Process event and get state change
-    const stateChange = sessionManager.handleEvent(event);
-
-    if (stateChange) {
-      // Broadcast to all WebSocket clients
-      broadcast({
-        messageType: 'event',
-        ...stateChange
-      });
-    }
-
+    broadcast({ messageType: 'event', ...event });
     res.status(200).json({ ok: true });
   });
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
-    res.json({
-      status: 'ok',
-      sessions: sessionManager.getAllSessions().length,
-      clients: clients.size
-    });
-  });
-
-  // Get all sessions
-  app.get('/api/sessions', (req, res) => {
-    res.json({
-      sessions: sessionManager.getSessionTree()
-    });
+    res.json({ status: 'ok', clients: clients.size });
   });
 
   return server;
