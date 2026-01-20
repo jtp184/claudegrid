@@ -494,7 +494,7 @@ export class BitVisualizer {
           this.yesRevertTimer = setTimeout(() => {
             this.yesRevertTimer = null;
             this.setState(States.THINKING);
-          }, 300);
+          }, 600);
         }
         break;
 

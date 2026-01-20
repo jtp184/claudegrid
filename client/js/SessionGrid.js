@@ -24,6 +24,9 @@ export class SessionGrid {
     this.targetCameraZ = 6;
     this.cameraLerpSpeed = 2.0;
 
+    // Position smoothing for sessions
+    this.positionLerpSpeed = 4.0;
+
     window.addEventListener('resize', () => this.onResize());
   }
 
@@ -248,9 +251,17 @@ export class SessionGrid {
     for (const session of this.sessions.values()) {
       const x = (i - (count - 1) / 2) * this.spacing;
 
-      session.bit.group.position.x = x;
-      session.bit.group.position.z = 0;
+      // Set target positions for smooth lerping
+      session.bit.group.userData.targetX = x;
+      session.bit.group.userData.targetZ = 0;
       session.bit.group.userData.baseY = 0;
+
+      // Initialize position immediately if not yet set (new session)
+      if (session.bit.group.userData.positionInitialized !== true) {
+        session.bit.group.position.x = x;
+        session.bit.group.position.z = 0;
+        session.bit.group.userData.positionInitialized = true;
+      }
 
       i++;
     }
@@ -271,11 +282,45 @@ export class SessionGrid {
 
     subagents.forEach((bit, i) => {
       const angle = (i / count) * Math.PI * 2;
-      bit.group.position.x = Math.cos(angle) * orbitRadius;
-      bit.group.position.z = Math.sin(angle) * orbitRadius;
-      bit.group.position.y = 0.5;
+      const x = Math.cos(angle) * orbitRadius;
+      const z = Math.sin(angle) * orbitRadius;
+
+      // Set target positions for smooth lerping
+      bit.group.userData.targetX = x;
+      bit.group.userData.targetZ = z;
       bit.group.userData.baseY = 0.5;
+
+      // Initialize position immediately if not yet set (new subagent)
+      if (bit.group.userData.positionInitialized !== true) {
+        bit.group.position.x = x;
+        bit.group.position.z = z;
+        bit.group.position.y = 0.5;
+        bit.group.userData.positionInitialized = true;
+      }
     });
+  }
+
+  lerpPosition(group, delta) {
+    const userData = group.userData;
+    if (userData.targetX === undefined) return;
+
+    const lerpFactor = Math.min(1, delta * this.positionLerpSpeed);
+
+    const dx = userData.targetX - group.position.x;
+    const dz = userData.targetZ - group.position.z;
+
+    // Only lerp if there's a significant difference
+    if (Math.abs(dx) > 0.001) {
+      group.position.x += dx * lerpFactor;
+    } else {
+      group.position.x = userData.targetX;
+    }
+
+    if (Math.abs(dz) > 0.001) {
+      group.position.z += dz * lerpFactor;
+    } else {
+      group.position.z = userData.targetZ;
+    }
   }
 
   /**
@@ -363,9 +408,13 @@ export class SessionGrid {
 
     // Update all Bits
     for (const session of this.sessions.values()) {
+      // Smooth position lerping for root sessions
+      this.lerpPosition(session.bit.group, delta);
       session.bit.update(delta, elapsed);
 
       for (const subBit of session.subagents.values()) {
+        // Smooth position lerping for subagents
+        this.lerpPosition(subBit.group, delta);
         subBit.update(delta, elapsed);
       }
     }
