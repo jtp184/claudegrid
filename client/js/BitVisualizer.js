@@ -659,11 +659,6 @@ export class BitVisualizer {
 
     // Update orbit positions for all tool bits to distribute evenly
     this.updateToolBitOrbits();
-
-    // Set parent to YES when tools are active
-    if (this.toolBits.size >= 1) {
-      this.setState(States.YES);
-    }
   }
 
   removeToolBit(toolUseId) {
@@ -674,14 +669,8 @@ export class BitVisualizer {
     // Update orbit positions for remaining active tools
     this.updateToolBitOrbits();
 
-    // Manage state based on remaining active tools
-    const activeCount = Array.from(this.toolBits.values())
-      .filter(tb => !tb.isDespawning).length;
-
-    if (activeCount === 0) {
-      // No tools remaining - return to THINKING
-      this.setState(States.THINKING);
-    }
+    // Flash YES briefly to indicate tool completion, then revert to THINKING
+    this.setState(States.YES, States.THINKING, 400);
   }
 
   updateToolBitOrbits() {
