@@ -84,9 +84,70 @@ export class SessionGrid {
   }
 
   initBackground() {
-    const gridHelper = new THREE.GridHelper(30, 60, 0x004466, 0x002233);
-    gridHelper.position.y = -3;
-    this.scene.add(gridHelper);
+    // Custom grid with fade-out gradient
+    const gridSize = 100;
+    const gridGeometry = new THREE.PlaneGeometry(gridSize, gridSize);
+    gridGeometry.rotateX(-Math.PI / 2);
+
+    const gridMaterial = new THREE.ShaderMaterial({
+      transparent: true,
+      uniforms: {
+        uColor1: { value: new THREE.Color(0x004466) },
+        uColor2: { value: new THREE.Color(0x002233) },
+        uGridSize: { value: gridSize },
+        uLineWidth: { value: 0.02 },
+        uFadeStart: { value: 0.3 },
+        uFadeEnd: { value: 0.9 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor1;
+        uniform vec3 uColor2;
+        uniform float uGridSize;
+        uniform float uLineWidth;
+        uniform float uFadeStart;
+        uniform float uFadeEnd;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+
+        void main() {
+          // Grid lines
+          float cellSize = uGridSize / 60.0;
+          vec2 grid = abs(fract(vWorldPos.xz / cellSize - 0.5) - 0.5) / fwidth(vWorldPos.xz / cellSize);
+          float line = min(grid.x, grid.y);
+          float gridLine = 1.0 - min(line, 1.0);
+
+          // Major grid lines (every 5 cells)
+          float majorCellSize = cellSize * 5.0;
+          vec2 majorGrid = abs(fract(vWorldPos.xz / majorCellSize - 0.5) - 0.5) / fwidth(vWorldPos.xz / majorCellSize);
+          float majorLine = min(majorGrid.x, majorGrid.y);
+          float majorGridLine = 1.0 - min(majorLine, 1.0);
+
+          // Distance-based fade
+          float dist = length(vWorldPos.xz) / (uGridSize * 0.5);
+          float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, dist);
+
+          // Combine colors
+          vec3 color = mix(uColor2, uColor1, majorGridLine * 0.5 + gridLine * 0.3);
+          float alpha = max(gridLine * 0.4, majorGridLine * 0.7) * fade;
+
+          gl_FragColor = vec4(color, alpha);
+        }
+      `
+    });
+
+    const gridMesh = new THREE.Mesh(gridGeometry, gridMaterial);
+    gridMesh.position.y = -3;
+    this.scene.add(gridMesh);
 
     const particleCount = 150;
     const particlesGeo = new THREE.BufferGeometry();
