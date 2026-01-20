@@ -1,13 +1,15 @@
 // AudioManager - Tone.js synth sounds for events
 export class AudioManager {
-  // Sound modes: 'off', 'on', 'request' (UserPromptSubmit, PermissionRequest, Stop)
-  static MODES = ['off', 'on', 'request'];
+  // Sound modes: 'off', 'response' (SessionStart, PermissionRequest, Stop), 'on' (all sounds)
+  static MODES = ['off', 'response', 'on'];
+  static RESPONSE_EVENTS = ['SessionStart', 'PermissionRequest', 'Stop'];
 
   constructor() {
-    this.mode = 'off';
+    this.mode = 'response';
     this.initialized = false;
     this.synth = null;
     this.noiseSynth = null;
+    this.volume = 0.7; // 0-1 range
   }
 
   async init() {
@@ -47,6 +49,9 @@ export class AudioManager {
     await this.Tone.start();
 
     this.initialized = true;
+
+    // Apply initial volume
+    this.setVolume(this.volume);
   }
 
   toggle() {
@@ -56,9 +61,20 @@ export class AudioManager {
     return this.mode;
   }
 
+  setVolume(value) {
+    this.volume = Math.max(0, Math.min(1, value));
+    if (this.initialized) {
+      // Convert 0-1 to decibels (-60 to 0 range, with base offsets)
+      const db = this.volume === 0 ? -Infinity : -40 * (1 - this.volume);
+      this.synth.volume.value = db - 12;
+      this.noiseSynth.volume.value = db - 18;
+    }
+  }
+
   async play(eventType) {
     if (this.mode === 'off') return;
-    if (this.mode === 'request' && eventType !== 'UserPromptSubmit' && eventType !== 'Stop' && eventType !== 'PermissionRequest') return;
+    // 'response' mode only plays specific response events
+    if (this.mode === 'response' && !AudioManager.RESPONSE_EVENTS.includes(eventType)) return;
 
     if (!this.initialized) {
       await this.init();

@@ -269,6 +269,49 @@ body {
     color: #44ff88;
 }
 
+#volume-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#volume-control label {
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: #446688;
+}
+
+#volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 80px;
+    height: 4px;
+    background: #224466;
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+#volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #44ddff;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(68, 221, 255, 0.5);
+}
+
+#volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: #44ddff;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 6px rgba(68, 221, 255, 0.5);
+}
+
 .toggle-btn {
     background: transparent;
     border: 1px solid #446688;

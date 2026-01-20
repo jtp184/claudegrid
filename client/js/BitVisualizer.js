@@ -480,7 +480,17 @@ export class BitVisualizer {
       this.revertTimeout = null;
     }
 
-    if (newState === this.state && this.morphProgress >= 1) return;
+    // If already in this state with morph complete, just set up auto-revert if needed
+    // This fixes the bug where multiple tool completions in quick succession would
+    // clear the first revert timer but never set a new one
+    if (newState === this.state && this.morphProgress >= 1) {
+      if (autoRevert) {
+        this.revertTimeout = setTimeout(() => {
+          this.setState(autoRevert);
+        }, revertDelay);
+      }
+      return;
+    }
 
     // If already transitioning to this state, let animation continue
     // but reset the auto-revert timer to extend the visible duration

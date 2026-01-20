@@ -11,6 +11,7 @@ class ClaudeGridApp {
     this.sessionCount = document.getElementById('session-count');
     this.emptyState = document.getElementById('empty-state');
     this.soundToggle = document.getElementById('sound-toggle');
+    this.volumeSlider = document.getElementById('volume-slider');
     this.clearLogBtn = document.getElementById('clear-log');
     this.logToggle = document.getElementById('log-toggle');
     this.controlsToggle = document.getElementById('controls-toggle');
@@ -36,7 +37,7 @@ class ClaudeGridApp {
   setupEventListeners() {
     this.soundToggle.addEventListener('click', async () => {
       const mode = this.audioManager.toggle();
-      const modeLabels = { off: 'OFF', on: 'ON', request: 'REQUEST ONLY' };
+      const modeLabels = { off: 'OFF', response: 'RESPONSE ONLY', on: 'ON' };
       this.soundToggle.textContent = `SOUND: ${modeLabels[mode]}`;
       this.soundToggle.classList.toggle('active', mode !== 'off');
 
@@ -44,6 +45,11 @@ class ClaudeGridApp {
         // Initialize audio on first enable (requires user gesture)
         await this.audioManager.init();
       }
+    });
+
+    this.volumeSlider.addEventListener('input', () => {
+      const volume = this.volumeSlider.value / 100;
+      this.audioManager.setVolume(volume);
     });
 
     this.clearLogBtn.addEventListener('click', () => {
