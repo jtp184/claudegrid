@@ -223,9 +223,23 @@ class ToolBit {
     this.totalTools = totalTools;
 
     this.scale = 0.2;
-    this.orbitRadius = 1.4;
-    this.orbitSpeed = 2.0;
-    this.orbitAngle = (orbitIndex / totalTools) * Math.PI * 2;
+
+    // Each bit gets a unique orbital configuration based on its index
+    // Use a seeded pseudo-random based on toolUseId for consistency
+    const seed = this.hashCode(toolUseId);
+    const rand = (offset) => {
+      const x = Math.sin(seed + offset) * 10000;
+      return x - Math.floor(x);
+    };
+
+    // Vary orbit parameters for each bit
+    this.orbitRadius = 1.2 + rand(1) * 0.4;        // 1.2 to 1.6
+    this.orbitSpeed = 1.5 + rand(2) * 1.0;         // 1.5 to 2.5 rad/sec
+    this.orbitAngle = rand(3) * Math.PI * 2;       // Random starting angle
+
+    // Orbital inclination - tilt the orbit plane
+    this.orbitInclination = (rand(4) - 0.5) * Math.PI * 0.6;  // -54° to +54° tilt
+    this.orbitAscendingNode = rand(5) * Math.PI * 2;          // Random orientation of tilt
 
     // Animation state
     this.currentScale = 0;
@@ -290,6 +304,17 @@ class ToolBit {
     this.group.scale.setScalar(0.01);
   }
 
+  // Simple hash function for consistent pseudo-random values
+  hashCode(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash;
+  }
+
   updateOrbitPosition(orbitIndex, totalTools) {
     this.orbitIndex = orbitIndex;
     this.totalTools = totalTools;
@@ -329,13 +354,21 @@ class ToolBit {
     // Update orbit position
     this.orbitAngle += delta * this.orbitSpeed;
 
-    // Calculate position with even distribution
-    const baseAngle = (this.orbitIndex / Math.max(1, this.totalTools)) * Math.PI * 2;
-    const currentAngle = baseAngle + this.orbitAngle;
+    // Calculate position on tilted orbital plane
+    // Start with position in the flat orbital plane
+    const flatX = Math.cos(this.orbitAngle) * this.orbitRadius;
+    const flatZ = Math.sin(this.orbitAngle) * this.orbitRadius;
 
-    this.group.position.x = Math.cos(currentAngle) * this.orbitRadius;
-    this.group.position.z = Math.sin(currentAngle) * this.orbitRadius;
-    this.group.position.y = 0;
+    // Apply orbital inclination (tilt around the X axis)
+    const inclinedY = flatZ * Math.sin(this.orbitInclination);
+    const inclinedZ = flatZ * Math.cos(this.orbitInclination);
+
+    // Apply ascending node rotation (rotate the tilted plane around Y axis)
+    const cosAN = Math.cos(this.orbitAscendingNode);
+    const sinAN = Math.sin(this.orbitAscendingNode);
+    this.group.position.x = flatX * cosAN - inclinedZ * sinAN;
+    this.group.position.z = flatX * sinAN + inclinedZ * cosAN;
+    this.group.position.y = inclinedY;
 
     // Apply scale
     this.group.scale.setScalar(Math.max(0.01, this.currentScale));

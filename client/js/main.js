@@ -54,16 +54,16 @@ class ClaudeGridApp {
       const isCollapsed = this.eventLogPanel.classList.toggle('collapsed');
       document.body.classList.toggle('log-collapsed', isCollapsed);
       this.logToggle.textContent = isCollapsed ? '▶' : '◀';
-      // Trigger resize for Three.js canvas
-      this.sessionGrid.onResize();
+      // Trigger resize after CSS transition completes (300ms)
+      setTimeout(() => this.sessionGrid.onResize(), 300);
     });
 
     this.controlsToggle.addEventListener('click', () => {
       const isCollapsed = this.controlsPanel.classList.toggle('collapsed');
       document.body.classList.toggle('controls-collapsed', isCollapsed);
       this.controlsToggle.textContent = isCollapsed ? '▲' : '▼';
-      // Trigger resize for Three.js canvas
-      this.sessionGrid.onResize();
+      // Trigger resize after CSS transition completes (300ms)
+      setTimeout(() => this.sessionGrid.onResize(), 300);
     });
   }
 
