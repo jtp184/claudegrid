@@ -28,9 +28,9 @@ const EventPriority = {
 // Timing parameters (ms)
 const Config = {
   minEventInterval: 80,      // Min time between events per session (~4-5 per morph)
-  stateCoalesceWindow: 100,  // Rapid state changes take the latest
+  stateCoalesceWindow: 400,  // Rapid state changes take the latest (~morph duration)
   pulseCoalesceWindow: 150,  // Multiple pulses combine
-  maxQueueAge: 2000,         // Drop events older than this
+  maxQueueAge: 5000,         // Drop events older than this (accommodate blocked events)
   processingInterval: 16     // ~60fps processing rate
 };
 
@@ -146,6 +146,28 @@ class SessionQueue {
   }
 
   /**
+   * Peek at the next event type without consuming it
+   */
+  peekNextEventType() {
+    if (this.pendingState) return 'state';
+    if (this.pendingPulse) return 'pulse';
+    if (this.events.length > 0) return this.events[0].data.type;
+    return null;
+  }
+
+  /**
+   * Find the tool_use_id for the next pending tool_end event
+   */
+  peekToolEndId() {
+    for (const entry of this.events) {
+      if (entry.data.type === 'tool_end') {
+        return entry.data.tool_use_id;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Clear all pending events (e.g., when session ends)
    */
   clear() {
@@ -225,6 +247,17 @@ export class EventScheduler {
 
     // Process one event per session per frame (if ready)
     for (const [sessionId, queue] of this.sessionQueues) {
+      // Check animation state before processing
+      const session = this.sessionGrid.getSession(sessionId);
+      if (session && session.bit) {
+        const animState = session.bit.getAnimationState();
+        const nextEventType = queue.peekNextEventType();
+
+        if (nextEventType && this.shouldBlockEvent(nextEventType, animState, session.bit, queue)) {
+          continue; // Skip - animation in progress
+        }
+      }
+
       const event = queue.dequeue(now);
       if (event) {
         this.processEvent(event);
@@ -259,16 +292,46 @@ export class EventScheduler {
   }
 
   /**
+   * Determine if an event should be blocked based on animation state
+   */
+  shouldBlockEvent(eventType, animState, bit, queue) {
+    switch (eventType) {
+      case 'state':
+        // Block state changes while ANY animation is active
+        return animState.isAnimating;
+
+      case 'tool_start':
+        // Block tool_start only during morph (other tools can spawn in parallel)
+        return animState.isMorphing;
+
+      case 'tool_end':
+        // Block tool_end if the target tool is still spawning
+        const pendingToolId = queue.peekToolEndId();
+        if (pendingToolId) {
+          const toolBit = bit.toolBits.get(pendingToolId);
+          if (toolBit && !toolBit.isDespawning) {
+            return Math.abs(toolBit.currentScale - toolBit.targetScale) > 0.01;
+          }
+        }
+        return false;
+
+      case 'pulse':
+      case 'dim':
+        // Never block - additive/overlay effects
+        return false;
+
+      default:
+        return false;
+    }
+  }
+
+  /**
    * Get animation state for a session (for animation-aware scheduling)
    */
   getAnimationState(sessionId) {
-    const bit = this.sessionGrid.getSession(sessionId);
-    if (!bit) return null;
+    const session = this.sessionGrid.getSession(sessionId);
+    if (!session || !session.bit) return null;
 
-    return {
-      morphProgress: bit.morphProgress,
-      isAnimating: bit.morphProgress < 1,
-      pulseIntensity: bit.pulseIntensity
-    };
+    return session.bit.getAnimationState();
   }
 }

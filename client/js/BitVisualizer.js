@@ -551,10 +551,24 @@ export class BitVisualizer {
    * Get current animation state for scheduler coordination
    */
   getAnimationState() {
+    let hasSpawningTools = false;
+    let hasDespawningTools = false;
+
+    for (const toolBit of this.toolBits.values()) {
+      if (!toolBit.isDespawning && Math.abs(toolBit.currentScale - toolBit.targetScale) > 0.01) {
+        hasSpawningTools = true;
+      }
+      if (toolBit.isDespawning && !toolBit.isFinished) {
+        hasDespawningTools = true;
+      }
+    }
+
     return {
       morphProgress: this.morphProgress,
-      isAnimating: this.morphProgress < 1,
-      pulseIntensity: this.pulseIntensity,
+      isMorphing: this.morphProgress < 1,
+      hasSpawningTools,
+      hasDespawningTools,
+      isAnimating: this.morphProgress < 1 || hasSpawningTools || hasDespawningTools,
       state: this.state,
       targetState: this.targetState
     };

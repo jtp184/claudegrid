@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { BitVisualizer, States } from './BitVisualizer.js';
 import { HoverLabelManager } from './HoverLabelManager.js';
 
@@ -55,6 +56,31 @@ export class SessionGrid {
     this.renderer.setSize(rect.width, rect.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
+
+    // Initialize OrbitControls
+    this.controls = new OrbitControls(this.camera, this.canvas);
+
+    // Configure for right-click rotation
+    this.controls.mouseButtons = {
+      LEFT: null,                    // Reserved for selection
+      MIDDLE: THREE.MOUSE.DOLLY,     // Zoom
+      RIGHT: THREE.MOUSE.ROTATE      // Rotation
+    };
+
+    // Smooth damping
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.05;
+
+    // Disable panning, enable zoom with limits
+    this.controls.enablePan = false;
+    this.controls.enableZoom = true;
+    this.controls.minDistance = 3;
+    this.controls.maxDistance = 50;
+
+    // Orbit around scene center, limit vertical rotation
+    this.controls.target.set(0, 0, 0);
+    this.controls.maxPolarAngle = Math.PI * 0.85;
+    this.controls.minPolarAngle = Math.PI * 0.15;
   }
 
   initPostProcessing() {
@@ -363,10 +389,19 @@ export class SessionGrid {
     const delta = this.clock.getDelta();
     const elapsed = this.clock.getElapsedTime();
 
-    // Smoothly interpolate camera position
-    const cameraDiff = this.targetCameraZ - this.camera.position.z;
-    if (Math.abs(cameraDiff) > 0.01) {
-      this.camera.position.z += cameraDiff * Math.min(1, delta * this.cameraLerpSpeed);
+    // Update OrbitControls for damping
+    this.controls.update();
+
+    // Auto-zoom based on session count (respects current view angle)
+    const currentDistance = this.camera.position.distanceTo(this.controls.target);
+    const distanceDiff = this.targetCameraZ - currentDistance;
+
+    if (Math.abs(distanceDiff) > 0.01) {
+      const direction = new THREE.Vector3()
+        .subVectors(this.camera.position, this.controls.target)
+        .normalize();
+      const newDistance = currentDistance + distanceDiff * Math.min(1, delta * this.cameraLerpSpeed);
+      this.camera.position.copy(this.controls.target).addScaledVector(direction, newDistance);
     }
 
     // Update all Bits
