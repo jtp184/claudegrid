@@ -204,7 +204,7 @@ class SessionStore {
       session = {
         id: claudeSessionId,
         claudeSessionId,
-        name: `Observed ${claudeSessionId.slice(0, 8)}`,
+        name: 'Session',
         directory: updates.cwd || null,
         tmuxSession: null,
         state: SessionState.WORKING,

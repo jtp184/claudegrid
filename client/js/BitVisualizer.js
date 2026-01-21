@@ -414,6 +414,9 @@ export class BitVisualizer {
     // Event data for hover labels
     this.eventData = null;
 
+    // Last tool file path (persists across events)
+    this.lastToolFilePath = null;
+
     // Tool bits for active tool uses
     this.toolBits = new Map();
 
@@ -558,6 +561,14 @@ export class BitVisualizer {
   }
 
   setEventData(event) {
+    // Track last tool file path (persists across non-tool events)
+    if (event.tool_input) {
+      const filePath = event.tool_input.file_path || event.tool_input.path;
+      if (filePath) {
+        this.lastToolFilePath = filePath;
+      }
+    }
+
     this.eventData = {
       cwd: event.cwd,
       tool_name: event.tool_name,

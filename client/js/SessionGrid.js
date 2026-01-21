@@ -15,7 +15,7 @@ const CONFIG = {
 };
 
 export class SessionGrid {
-  constructor(canvas) {
+  constructor(canvas, options = {}) {
     this.canvas = canvas;
     this.sessions = new Map(); // session_id -> { bit, subagents: Map }
     this.spacing = 4;
@@ -24,7 +24,7 @@ export class SessionGrid {
     this.initPostProcessing();
     this.initBackground();
 
-    this.hoverLabelManager = new HoverLabelManager(this.canvas, this.camera);
+    this.hoverLabelManager = new HoverLabelManager(this.canvas, this.camera, options);
 
     this.clock = new THREE.Clock();
 

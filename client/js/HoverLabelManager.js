@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 
 export class HoverLabelManager {
-  constructor(canvas, camera) {
+  constructor(canvas, camera, options = {}) {
     this.canvas = canvas;
     this.camera = camera;
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.hoveredBit = null;
+
+    // Optional callbacks
+    this.getSessionName = options.getSessionName || null;
+    this.onBitClick = options.onBitClick || null;
 
     // Create label container
     this.container = document.createElement('div');
@@ -28,7 +32,9 @@ export class HoverLabelManager {
 
     // Bind event handlers
     this.onMouseMove = this.onMouseMove.bind(this);
+    this.onClick = this.onClick.bind(this);
     this.canvas.addEventListener('mousemove', this.onMouseMove);
+    this.canvas.addEventListener('click', this.onClick);
   }
 
   onMouseMove(event) {
@@ -37,37 +43,10 @@ export class HoverLabelManager {
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
-  getContextText(eventData) {
-    if (!eventData) return null;
-
-    // Permission request or notification - show message
-    if (eventData.message) {
-      return eventData.message;
+  onClick() {
+    if (this.hoveredBit && this.onBitClick) {
+      this.onBitClick(this.hoveredBit.sessionId);
     }
-
-    // Tool use - show tool name with file path if present
-    if (eventData.tool_name) {
-      let text = eventData.tool_name;
-
-      // Extract file path from tool_input if present
-      if (eventData.tool_input) {
-        const filePath = eventData.tool_input.file_path ||
-                         eventData.tool_input.path ||
-                         eventData.tool_input.command;
-        if (filePath) {
-          // Truncate long paths
-          const maxLen = 50;
-          const displayPath = filePath.length > maxLen
-            ? '...' + filePath.slice(-maxLen)
-            : filePath;
-          text += ': ' + displayPath;
-        }
-      }
-
-      return text;
-    }
-
-    return null;
   }
 
   update(sessions) {
@@ -121,13 +100,24 @@ export class HoverLabelManager {
 
     // Project to screen coordinates
     const screenPos = worldPos.clone().project(this.camera);
-    const rect = this.canvas.getBoundingClientRect();
-    const x = (screenPos.x * 0.5 + 0.5) * rect.width;
-    const y = (-screenPos.y * 0.5 + 0.5) * rect.height;
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const containerRect = this.container.getBoundingClientRect();
 
-    // Show cwd label above
-    if (eventData.cwd) {
-      this.cwdLabel.textContent = eventData.cwd;
+    // Calculate position relative to container (not canvas)
+    const x = (screenPos.x * 0.5 + 0.5) * canvasRect.width + (canvasRect.left - containerRect.left);
+    const y = (-screenPos.y * 0.5 + 0.5) * canvasRect.height + (canvasRect.top - containerRect.top);
+
+    // Upper label: managed session name if available, otherwise cwd
+    let upperText = null;
+    if (this.getSessionName) {
+      upperText = this.getSessionName(bit.sessionId);
+    }
+    if (!upperText && eventData.cwd) {
+      upperText = eventData.cwd;
+    }
+
+    if (upperText) {
+      this.cwdLabel.textContent = upperText;
       this.cwdLabel.style.display = 'block';
       this.cwdLabel.style.left = `${x}px`;
       this.cwdLabel.style.top = `${y - 90}px`;
@@ -136,10 +126,29 @@ export class HoverLabelManager {
       this.cwdLabel.style.display = 'none';
     }
 
-    // Show context label below
-    const contextText = this.getContextText(eventData);
-    if (contextText) {
-      this.contextLabel.textContent = contextText;
+    // Lower label: just the file path from last tool, nothing if no filepath
+    let filePath = bit.lastToolFilePath;
+    if (filePath) {
+      // Make path relative to cwd if possible
+      const cwd = eventData.cwd;
+      if (cwd && filePath.startsWith(cwd)) {
+        filePath = filePath.slice(cwd.length);
+        // Remove leading slash if present
+        if (filePath.startsWith('/')) {
+          filePath = filePath.slice(1);
+        }
+        // Show ./ for files in the cwd
+        if (filePath) {
+          filePath = './' + filePath;
+        }
+      }
+
+      // Truncate long paths
+      const maxLen = 60;
+      const displayPath = filePath.length > maxLen
+        ? '...' + filePath.slice(-maxLen)
+        : filePath;
+      this.contextLabel.textContent = displayPath;
       this.contextLabel.style.display = 'block';
       this.contextLabel.style.left = `${x}px`;
       this.contextLabel.style.top = `${y + 70}px`;
@@ -156,6 +165,7 @@ export class HoverLabelManager {
 
   dispose() {
     this.canvas.removeEventListener('mousemove', this.onMouseMove);
+    this.canvas.removeEventListener('click', this.onClick);
     this.container.remove();
   }
 }

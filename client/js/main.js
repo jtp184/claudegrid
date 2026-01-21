@@ -84,7 +84,10 @@ class ClaudeGridApp {
     this.permissionText = document.getElementById('permission-text');
     this.permissionOptions = document.getElementById('permission-options');
 
-    this.sessionGrid = new SessionGrid(this.canvas);
+    this.sessionGrid = new SessionGrid(this.canvas, {
+      getSessionName: (claudeSessionId) => this.getSessionNameByClaudeId(claudeSessionId),
+      onBitClick: (claudeSessionId) => this.selectSessionByClaudeId(claudeSessionId)
+    });
     this.debouncer = new SimpleDebouncer((event) => this.sessionGrid.handleEvent(event));
     this.eventLog = new EventLog(this.logContainer);
     this.audioManager = new AudioManager();
@@ -419,7 +422,6 @@ class ClaudeGridApp {
         <div class="session-info">
           <span class="session-state" style="color: ${stateColors[session.state] || '#446688'}">●</span>
           <span class="session-name">${this.escapeHtml(session.name)} <span class="session-id">(${this.escapeHtml(session.id.slice(0, 8))})</span></span>
-          <span class="observed-badge">OBSERVE ONLY</span>
         </div>
         ${session.directory ? `<div class="session-dir">${this.escapeHtml(this.truncatePath(session.directory))}</div>` : ''}
       `;
@@ -432,19 +434,12 @@ class ClaudeGridApp {
         </div>
         <div class="session-dir">${this.escapeHtml(this.truncatePath(session.directory))}</div>
         <div class="session-actions">
-          <button class="action-btn cancel-btn" title="Cancel">⊗</button>
-          <button class="action-btn delete-btn" title="Delete">×</button>
+          <button class="action-btn delete-btn" title="Delete session">×</button>
         </div>
       `;
 
       // Action button handlers (managed sessions only)
-      const cancelActionBtn = item.querySelector('.cancel-btn');
       const deleteBtn = item.querySelector('.delete-btn');
-
-      cancelActionBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.cancelSession(session.id);
-      });
 
       deleteBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -648,6 +643,29 @@ class ClaudeGridApp {
       this.hidePermissionModal();
     } catch (err) {
       console.error('Error sending permission response:', err);
+    }
+  }
+
+  // ===== BIT INTERACTION =====
+
+  getSessionNameByClaudeId(claudeSessionId) {
+    // Find managed session with matching claudeSessionId and return user-supplied name
+    const session = this.managedSessions.find(s => s.claudeSessionId === claudeSessionId);
+    if (session && session.name && !session.observed) {
+      return session.name;
+    }
+    return null;
+  }
+
+  selectSessionByClaudeId(claudeSessionId) {
+    // Find managed session with matching claudeSessionId
+    const session = this.managedSessions.find(s => s.claudeSessionId === claudeSessionId && !s.observed);
+    if (session && session.state !== 'offline') {
+      this.selectSession(session.id);
+      // Focus prompt input
+      if (this.promptInput) {
+        this.promptInput.focus();
+      }
     }
   }
 

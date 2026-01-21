@@ -266,6 +266,12 @@ function createServer() {
         // If no claudeSessionId was linked, try to find and remove by directory
         const observed = sessionStore.findObservedByDirectory(session.directory);
         if (observed) {
+          // Broadcast SessionEnd so client can despawn the Bit
+          broadcast({
+            messageType: 'event',
+            session_id: observed.claudeSessionId,
+            hook_event_name: 'SessionEnd'
+          });
           sessionStore.removeObserved(observed.claudeSessionId);
         }
       }
