@@ -6,7 +6,7 @@
     <title>ClaudeGrid - Session Visualizer</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="log-collapsed controls-collapsed">
+<body class="log-collapsed controls-collapsed session-panel-collapsed">
     <div id="header">
         <h1>CLAUDEGRID</h1>
         <div id="status">
@@ -16,18 +16,41 @@
     </div>
 
     <div id="main-container">
+        <!-- Session Panel (left side) -->
+        <div id="session-panel" class="collapsed">
+            <div id="session-panel-header">
+                <span>SESSIONS</span>
+                <button id="session-panel-toggle" class="toggle-btn" title="Toggle session panel">&lt;</button>
+            </div>
+            <div id="session-panel-content">
+                <button id="new-session-btn" class="btn new-session-btn">+ NEW SESSION</button>
+                <div id="session-list"></div>
+            </div>
+        </div>
+
         <canvas id="canvas"></canvas>
+
         <div id="event-log" class="collapsed">
             <div id="log-header">
                 <span>EVENT LOG</span>
-                <button id="log-toggle" class="toggle-btn" title="Toggle event log">▶</button>
+                <button id="log-toggle" class="toggle-btn" title="Toggle event log">&gt;</button>
             </div>
             <div id="log-entries"></div>
         </div>
     </div>
 
+    <!-- Prompt Bar (bottom, above controls) -->
+    <div id="prompt-bar">
+        <select id="session-selector">
+            <option value="">Select session...</option>
+        </select>
+        <input type="text" id="prompt-input" placeholder="Select a session first..." disabled>
+        <button id="prompt-send" class="btn" disabled>SEND</button>
+        <button id="cancel-btn" class="btn cancel-btn" disabled title="Cancel (Ctrl+C)">CANCEL</button>
+    </div>
+
     <div id="controls" class="collapsed">
-        <button id="controls-toggle" class="toggle-btn" title="Toggle controls">▲</button>
+        <button id="controls-toggle" class="toggle-btn" title="Toggle controls">&and;</button>
         <div id="controls-content">
             <button id="sound-toggle" class="btn">SOUND: RESPONSE ONLY</button>
             <div id="volume-control">
@@ -42,7 +65,35 @@
         <div class="empty-message">
             <div class="empty-icon">&#9678;</div>
             <div>Waiting for Claude Code sessions...</div>
-            <div class="empty-hint">Start a Claude Code session to see activity</div>
+            <div class="empty-hint">Start a Claude Code session or create one below</div>
+        </div>
+    </div>
+
+    <!-- Create Session Modal -->
+    <div id="create-session-modal" class="modal">
+        <div class="modal-content">
+            <h2>Create New Session</h2>
+            <div class="form-group">
+                <label for="session-name">Session Name</label>
+                <input type="text" id="session-name" placeholder="My Session">
+            </div>
+            <div class="form-group">
+                <label for="session-directory">Working Directory</label>
+                <input type="text" id="session-directory" placeholder="/path/to/project">
+            </div>
+            <div class="modal-actions">
+                <button id="create-session-cancel" class="btn">CANCEL</button>
+                <button id="create-session-confirm" class="btn btn-primary">CREATE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Permission Modal -->
+    <div id="permission-modal" class="modal">
+        <div class="modal-content permission-content">
+            <h2>Permission Required</h2>
+            <pre id="permission-text"></pre>
+            <div id="permission-options" class="permission-options"></div>
         </div>
     </div>
 

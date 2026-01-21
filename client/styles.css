@@ -66,7 +66,7 @@ body {
     top: 50px;
     left: 0;
     right: 0;
-    bottom: 50px;
+    bottom: 90px;
     display: flex;
     overflow: hidden;
 }
@@ -77,6 +77,207 @@ body {
     display: block;
 }
 
+/* Session Panel (left side) */
+#session-panel {
+    width: 280px;
+    background: rgba(0, 20, 40, 0.85);
+    border-right: 1px solid #224466;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease, min-width 0.3s ease;
+    min-width: 280px;
+}
+
+#session-panel.collapsed {
+    width: 44px;
+    min-width: 44px;
+}
+
+#session-panel.collapsed #session-panel-content {
+    display: none;
+}
+
+#session-panel.collapsed #session-panel-header span {
+    display: none;
+}
+
+#session-panel-header {
+    padding: 12px 16px;
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: #446688;
+    border-bottom: 1px solid #224466;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#session-panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.new-session-btn {
+    width: 100%;
+    margin-bottom: 12px;
+    background: rgba(68, 255, 136, 0.1);
+    border-color: #44ff88;
+    color: #44ff88;
+}
+
+.new-session-btn:hover {
+    background: rgba(68, 255, 136, 0.2);
+}
+
+#session-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.session-item {
+    padding: 10px 12px;
+    background: rgba(0, 40, 80, 0.3);
+    border: 1px solid #224466;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.session-item:hover {
+    background: rgba(0, 60, 100, 0.4);
+    border-color: #44ddff;
+}
+
+.session-item.selected {
+    background: rgba(68, 221, 255, 0.15);
+    border-color: #44ddff;
+}
+
+.session-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.session-state {
+    font-size: 10px;
+}
+
+.session-name {
+    font-size: 12px;
+    font-weight: bold;
+    color: #44ddff;
+}
+
+.session-dir {
+    font-size: 10px;
+    color: #446688;
+    margin-bottom: 8px;
+}
+
+.session-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.action-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid #446688;
+    color: #44ddff;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background: rgba(68, 221, 255, 0.1);
+    border-color: #44ddff;
+}
+
+.action-btn.delete-btn:hover {
+    background: rgba(255, 68, 68, 0.1);
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+.no-sessions {
+    text-align: center;
+    color: #446688;
+    padding: 20px;
+    font-size: 12px;
+}
+
+/* Session sections */
+.session-section {
+    margin-bottom: 16px;
+}
+
+.session-section-header {
+    font-size: 10px;
+    font-weight: bold;
+    color: #446688;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.section-icon {
+    font-size: 8px;
+}
+
+.managed-section .session-section-header {
+    color: #44ff88;
+    border-left: 2px solid #44ff88;
+}
+
+.observed-section .session-section-header {
+    color: #aa88ff;
+    border-left: 2px solid #aa88ff;
+}
+
+.observed-section .session-item {
+    border-style: dashed;
+    border-color: #664488;
+    cursor: default;
+}
+
+.observed-section .session-item:hover {
+    border-color: #aa88ff;
+    background: rgba(170, 136, 255, 0.1);
+}
+
+.observed-badge {
+    font-size: 8px;
+    padding: 2px 4px;
+    background: rgba(170, 136, 255, 0.2);
+    border: 1px solid #aa88ff;
+    border-radius: 2px;
+    color: #aa88ff;
+    margin-left: auto;
+    letter-spacing: 0.5px;
+}
+
+.no-terminal-badge {
+    font-size: 8px;
+    padding: 2px 4px;
+    background: rgba(102, 102, 136, 0.3);
+    border: 1px solid #666688;
+    border-radius: 2px;
+    color: #888899;
+    margin-left: auto;
+    letter-spacing: 0.5px;
+}
+
+/* Event Log (right side) */
 #event-log {
     width: 350px;
     background: rgba(0, 20, 40, 0.85);
@@ -198,6 +399,95 @@ body {
     word-break: break-all;
 }
 
+/* Prompt Bar */
+#prompt-bar {
+    position: fixed;
+    bottom: 50px;
+    left: 0;
+    right: 0;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 20px;
+    background: rgba(0, 15, 30, 0.95);
+    border-top: 1px solid #224466;
+    z-index: 100;
+}
+
+#session-selector {
+    width: 200px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    background: rgba(0, 40, 80, 0.5);
+    border: 1px solid #446688;
+    color: #44ddff;
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+#session-selector:focus {
+    outline: none;
+    border-color: #44ddff;
+}
+
+#session-selector option {
+    background: #001020;
+    color: #44ddff;
+}
+
+#prompt-input {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    background: rgba(0, 40, 80, 0.5);
+    border: 1px solid #446688;
+    color: #44ddff;
+    border-radius: 2px;
+}
+
+#prompt-input:focus {
+    outline: none;
+    border-color: #44ddff;
+    box-shadow: 0 0 10px rgba(68, 221, 255, 0.2);
+}
+
+#prompt-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#prompt-input::placeholder {
+    color: #446688;
+}
+
+#prompt-send {
+    padding: 8px 16px;
+}
+
+#prompt-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.cancel-btn {
+    border-color: #ff8844;
+    color: #ff8844;
+}
+
+.cancel-btn:hover:not(:disabled) {
+    background: rgba(255, 136, 68, 0.1);
+    border-color: #ff8844;
+}
+
+.cancel-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Controls */
 #controls {
     position: fixed;
     bottom: 0;
@@ -269,6 +559,17 @@ body {
     color: #44ff88;
 }
 
+.btn-primary {
+    background: rgba(68, 255, 136, 0.1);
+    border-color: #44ff88;
+    color: #44ff88;
+}
+
+.btn-primary:hover {
+    background: rgba(68, 255, 136, 0.2);
+    box-shadow: 0 0 10px rgba(68, 255, 136, 0.3);
+}
+
 #volume-control {
     display: flex;
     align-items: center;
@@ -329,12 +630,116 @@ body {
     border-color: #44ddff;
 }
 
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.visible {
+    display: flex;
+}
+
+.modal-content {
+    background: rgba(0, 20, 40, 0.95);
+    border: 1px solid #44ddff;
+    border-radius: 4px;
+    padding: 24px;
+    min-width: 400px;
+    max-width: 600px;
+    box-shadow: 0 0 30px rgba(68, 221, 255, 0.3);
+}
+
+.modal-content h2 {
+    font-size: 16px;
+    letter-spacing: 3px;
+    color: #44ddff;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #446688;
+    margin-bottom: 6px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    background: rgba(0, 40, 80, 0.5);
+    border: 1px solid #446688;
+    color: #44ddff;
+    border-radius: 2px;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #44ddff;
+}
+
+.form-group input::placeholder {
+    color: #446688;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+/* Permission Modal */
+.permission-content {
+    max-width: 500px;
+}
+
+#permission-text {
+    font-size: 11px;
+    color: #88aacc;
+    background: rgba(0, 40, 80, 0.3);
+    padding: 12px;
+    border-radius: 2px;
+    margin-bottom: 16px;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.permission-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+}
+
+.permission-btn {
+    min-width: 100px;
+}
+
+/* Empty State */
 #empty-state {
     position: fixed;
     top: 50px;
-    left: 0;
-    right: 350px;
-    bottom: 50px;
+    left: 44px;
+    right: 44px;
+    bottom: 90px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -426,17 +831,33 @@ body {
     border-color: #664400;
 }
 
-/* Collapsed state adjustments for main container and empty state */
+/* Collapsed state adjustments */
 body.controls-collapsed #main-container {
+    bottom: 64px;
+}
+
+body.controls-collapsed #prompt-bar {
     bottom: 24px;
 }
 
 body.controls-collapsed #empty-state {
-    bottom: 24px;
+    bottom: 64px;
 }
 
 body.log-collapsed #empty-state {
     right: 44px;
+}
+
+body.session-panel-collapsed #empty-state {
+    left: 44px;
+}
+
+body:not(.session-panel-collapsed) #empty-state {
+    left: 280px;
+}
+
+body:not(.log-collapsed) #empty-state {
+    right: 350px;
 }
 
 /* Responsive breakpoints */
@@ -446,12 +867,17 @@ body.log-collapsed #empty-state {
         min-width: 280px;
     }
 
-    #empty-state {
+    #session-panel {
+        width: 220px;
+        min-width: 220px;
+    }
+
+    body:not(.log-collapsed) #empty-state {
         right: 280px;
     }
 
-    body.log-collapsed #empty-state {
-        right: 44px;
+    body:not(.session-panel-collapsed) #empty-state {
+        left: 220px;
     }
 }
 
@@ -461,8 +887,17 @@ body.log-collapsed #empty-state {
         min-width: 200px;
     }
 
-    #empty-state {
+    #session-panel {
+        width: 180px;
+        min-width: 180px;
+    }
+
+    body:not(.log-collapsed) #empty-state {
         right: 200px;
+    }
+
+    body:not(.session-panel-collapsed) #empty-state {
+        left: 180px;
     }
 
     .btn {
@@ -479,10 +914,19 @@ body.log-collapsed #empty-state {
         gap: 10px;
         font-size: 10px;
     }
+
+    #session-selector {
+        width: 150px;
+    }
+
+    #prompt-bar {
+        gap: 6px;
+        padding: 0 10px;
+    }
 }
 
 @media (max-width: 550px) {
-    /* Auto-collapse event log on very small screens */
+    /* Auto-collapse panels on very small screens */
     #event-log {
         width: 44px;
         min-width: 44px;
@@ -496,7 +940,21 @@ body.log-collapsed #empty-state {
         display: none;
     }
 
+    #session-panel {
+        width: 44px;
+        min-width: 44px;
+    }
+
+    #session-panel #session-panel-content {
+        display: none;
+    }
+
+    #session-panel #session-panel-header span {
+        display: none;
+    }
+
     #empty-state {
+        left: 44px;
         right: 44px;
     }
 
@@ -522,5 +980,26 @@ body.log-collapsed #empty-state {
         padding: 6px 12px;
         font-size: 10px;
         letter-spacing: 1px;
+    }
+
+    #session-selector {
+        width: 120px;
+        font-size: 10px;
+        padding: 6px 8px;
+    }
+
+    #prompt-input {
+        font-size: 10px;
+        padding: 6px 8px;
+    }
+
+    #prompt-send {
+        padding: 6px 10px;
+        font-size: 10px;
+    }
+
+    .cancel-btn {
+        padding: 6px 10px;
+        font-size: 10px;
     }
 }

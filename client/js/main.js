@@ -1,6 +1,7 @@
 import { SessionGrid } from './SessionGrid.js';
 import { EventLog } from './EventLog.js';
 import { AudioManager } from './AudioManager.js';
+import { SessionAPI } from './SessionAPI.js';
 
 /**
  * SimpleDebouncer - Debounces events per session
@@ -61,10 +62,37 @@ class ClaudeGridApp {
     this.eventLogPanel = document.getElementById('event-log');
     this.controlsPanel = document.getElementById('controls');
 
+    // Session control elements
+    this.sessionPanel = document.getElementById('session-panel');
+    this.sessionList = document.getElementById('session-list');
+    this.newSessionBtn = document.getElementById('new-session-btn');
+    this.sessionPanelToggle = document.getElementById('session-panel-toggle');
+    this.promptBar = document.getElementById('prompt-bar');
+    this.promptInput = document.getElementById('prompt-input');
+    this.promptSendBtn = document.getElementById('prompt-send');
+    this.sessionSelector = document.getElementById('session-selector');
+    this.cancelBtn = document.getElementById('cancel-btn');
+
+    // Modal elements
+    this.createSessionModal = document.getElementById('create-session-modal');
+    this.sessionNameInput = document.getElementById('session-name');
+    this.sessionDirInput = document.getElementById('session-directory');
+    this.createSessionConfirm = document.getElementById('create-session-confirm');
+    this.createSessionCancel = document.getElementById('create-session-cancel');
+
+    this.permissionModal = document.getElementById('permission-modal');
+    this.permissionText = document.getElementById('permission-text');
+    this.permissionOptions = document.getElementById('permission-options');
+
     this.sessionGrid = new SessionGrid(this.canvas);
     this.debouncer = new SimpleDebouncer((event) => this.sessionGrid.handleEvent(event));
     this.eventLog = new EventLog(this.logContainer);
     this.audioManager = new AudioManager();
+    this.sessionAPI = new SessionAPI();
+
+    // Managed sessions
+    this.managedSessions = [];
+    this.selectedSessionId = null;
 
     this.ws = null;
     this.reconnectAttempts = 0;
@@ -124,6 +152,64 @@ class ClaudeGridApp {
       // Trigger resize after CSS transition completes (300ms)
       setTimeout(() => this.sessionGrid.onResize(), 300);
     });
+
+    // Session panel toggle
+    this.sessionPanelToggle?.addEventListener('click', () => {
+      const isCollapsed = this.sessionPanel.classList.toggle('collapsed');
+      document.body.classList.toggle('session-panel-collapsed', isCollapsed);
+      this.sessionPanelToggle.textContent = isCollapsed ? '<' : '>';
+      setTimeout(() => this.sessionGrid.onResize(), 300);
+    });
+
+    // New session button
+    this.newSessionBtn?.addEventListener('click', () => {
+      this.showCreateSessionModal();
+    });
+
+    // Create session modal
+    this.createSessionConfirm?.addEventListener('click', () => {
+      this.createSession();
+    });
+
+    this.createSessionCancel?.addEventListener('click', () => {
+      this.hideCreateSessionModal();
+    });
+
+    // Prompt bar
+    this.promptSendBtn?.addEventListener('click', () => {
+      this.sendPrompt();
+    });
+
+    this.promptInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this.sendPrompt();
+      }
+    });
+
+    // Cancel button
+    this.cancelBtn?.addEventListener('click', () => {
+      this.cancelCurrentSession();
+    });
+
+    // Session selector
+    this.sessionSelector?.addEventListener('change', () => {
+      this.selectedSessionId = this.sessionSelector.value || null;
+      this.updatePromptBarState();
+    });
+
+    // Close modals on backdrop click
+    this.createSessionModal?.addEventListener('click', (e) => {
+      if (e.target === this.createSessionModal) {
+        this.hideCreateSessionModal();
+      }
+    });
+
+    this.permissionModal?.addEventListener('click', (e) => {
+      if (e.target === this.permissionModal) {
+        // Don't allow closing permission modal by clicking backdrop
+      }
+    });
   }
 
   connect() {
@@ -178,13 +264,40 @@ class ClaudeGridApp {
     const msgType = data.messageType || data.type;
     switch (msgType) {
       case 'init':
-        // Initialize with existing sessions (empty in simplified model)
+        // Initialize with existing sessions
         this.sessionGrid.initFromSessions(data.sessions || []);
+        this.updateManagedSessions(data.sessions || []);
         this.updateSessionCount();
         break;
 
       case 'event':
         this.handleEvent(data);
+        break;
+
+      case 'sessions':
+        // Session list update
+        this.updateManagedSessions(data.sessions || []);
+        break;
+
+      case 'permission_prompt':
+        // Permission prompt from a session
+        this.showPermissionModal(data.sessionId, data.options);
+        break;
+
+      case 'error':
+        console.error('Server error:', data.error);
+        break;
+
+      case 'prompt_sent':
+        console.log('Prompt sent to session:', data.sessionId);
+        break;
+
+      case 'cancelled':
+        console.log('Session cancelled:', data.sessionId);
+        break;
+
+      case 'pong':
+        // Ping response
         break;
     }
   }
@@ -223,7 +336,7 @@ class ClaudeGridApp {
     this.sessionCount.textContent = `${count} SESSION${count !== 1 ? 'S' : ''}`;
 
     // Show/hide empty state
-    if (count === 0) {
+    if (count === 0 && this.managedSessions.length === 0) {
       this.emptyState.classList.remove('hidden');
     } else {
       this.emptyState.classList.add('hidden');
@@ -236,6 +349,319 @@ class ClaudeGridApp {
       this.sessionGrid.update();
     };
     animate();
+  }
+
+  // ===== SESSION MANAGEMENT =====
+
+  updateManagedSessions(sessions) {
+    this.managedSessions = sessions;
+    this.renderSessionList();
+    this.updateSessionSelector();
+    this.updatePromptBarState();
+  }
+
+  renderSessionList() {
+    if (!this.sessionList) return;
+
+    this.sessionList.innerHTML = '';
+
+    // Separate sessions: managed (with tmux) vs observed (hook-only)
+    const managedSessions = this.managedSessions.filter(s => !s.observed);
+    const observedSessions = this.managedSessions.filter(s => s.observed);
+
+    if (managedSessions.length === 0 && observedSessions.length === 0) {
+      this.sessionList.innerHTML = '<div class="no-sessions">No sessions</div>';
+      return;
+    }
+
+    // Render managed sessions (with tmux - can send data)
+    if (managedSessions.length > 0) {
+      const managedSection = document.createElement('div');
+      managedSection.className = 'session-section managed-section';
+      managedSection.innerHTML = `<div class="session-section-header"><span class="section-icon">▶</span> MANAGED</div>`;
+
+      for (const session of managedSessions) {
+        managedSection.appendChild(this.createSessionItem(session));
+      }
+      this.sessionList.appendChild(managedSection);
+    }
+
+    // Render observed sessions (hook-only - can't send data)
+    if (observedSessions.length > 0) {
+      const observedSection = document.createElement('div');
+      observedSection.className = 'session-section observed-section';
+      observedSection.innerHTML = `<div class="session-section-header"><span class="section-icon">◉</span> OBSERVED</div>`;
+
+      for (const session of observedSessions) {
+        observedSection.appendChild(this.createSessionItem(session));
+      }
+      this.sessionList.appendChild(observedSection);
+    }
+  }
+
+  createSessionItem(session) {
+    const item = document.createElement('div');
+    item.className = `session-item state-${session.state}${session.observed ? ' observed' : ''}`;
+    item.dataset.id = session.id;
+
+    const stateColors = {
+      idle: '#44ff88',
+      working: '#ffdd44',
+      waiting: '#ff8844',
+      offline: '#666688'
+    };
+
+    const isObserved = session.observed;
+
+    if (isObserved) {
+      // Observed session - no actions, just display
+      item.innerHTML = `
+        <div class="session-info">
+          <span class="session-state" style="color: ${stateColors[session.state] || '#446688'}">●</span>
+          <span class="session-name">${this.escapeHtml(session.name)}</span>
+          <span class="observed-badge">OBSERVE ONLY</span>
+        </div>
+        ${session.directory ? `<div class="session-dir">${this.escapeHtml(this.truncatePath(session.directory))}</div>` : ''}
+      `;
+    } else {
+      // Managed session - full actions
+      item.innerHTML = `
+        <div class="session-info">
+          <span class="session-state" style="color: ${stateColors[session.state] || '#446688'}">●</span>
+          <span class="session-name">${this.escapeHtml(session.name)}</span>
+        </div>
+        <div class="session-dir">${this.escapeHtml(this.truncatePath(session.directory))}</div>
+        <div class="session-actions">
+          <button class="action-btn cancel-btn" title="Cancel">⊗</button>
+          <button class="action-btn delete-btn" title="Delete">×</button>
+        </div>
+      `;
+
+      // Action button handlers (managed sessions only)
+      const cancelActionBtn = item.querySelector('.cancel-btn');
+      const deleteBtn = item.querySelector('.delete-btn');
+
+      cancelActionBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.cancelSession(session.id);
+      });
+
+      deleteBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.deleteSession(session.id);
+      });
+
+      // Select session on click (managed only - can send prompts)
+      item.addEventListener('click', () => {
+        this.selectSession(session.id);
+      });
+    }
+
+    return item;
+  }
+
+  updateSessionSelector() {
+    if (!this.sessionSelector) return;
+
+    const currentValue = this.sessionSelector.value;
+    this.sessionSelector.innerHTML = '<option value="">Select session...</option>';
+
+    // Only show managed sessions (not observed) in the selector
+    for (const session of this.managedSessions) {
+      if (!session.observed && session.state !== 'offline') {
+        const option = document.createElement('option');
+        option.value = session.id;
+        option.textContent = `${session.name} (${session.state})`;
+        this.sessionSelector.appendChild(option);
+      }
+    }
+
+    // Restore selection if still valid (must be managed and not offline)
+    const validSession = this.managedSessions.find(s => s.id === currentValue && !s.observed && s.state !== 'offline');
+    if (currentValue && validSession) {
+      this.sessionSelector.value = currentValue;
+      this.selectedSessionId = currentValue;
+    } else {
+      this.selectedSessionId = null;
+    }
+  }
+
+  updatePromptBarState() {
+    if (!this.promptInput || !this.promptSendBtn) return;
+
+    const hasSelection = !!this.selectedSessionId;
+    const session = this.managedSessions.find(s => s.id === this.selectedSessionId);
+    const canSend = hasSelection && session && session.state !== 'offline';
+
+    this.promptInput.disabled = !canSend;
+    this.promptSendBtn.disabled = !canSend;
+    this.cancelBtn.disabled = !canSend;
+
+    if (canSend) {
+      this.promptInput.placeholder = `Send prompt to ${session.name}...`;
+    } else if (hasSelection) {
+      this.promptInput.placeholder = 'Session is offline';
+    } else {
+      this.promptInput.placeholder = 'Select a session first...';
+    }
+  }
+
+  selectSession(id) {
+    this.selectedSessionId = id;
+    if (this.sessionSelector) {
+      this.sessionSelector.value = id;
+    }
+    this.updatePromptBarState();
+
+    // Highlight selected in list
+    document.querySelectorAll('.session-item').forEach(item => {
+      item.classList.toggle('selected', item.dataset.id === id);
+    });
+  }
+
+  // ===== SESSION ACTIONS =====
+
+  showCreateSessionModal() {
+    if (!this.createSessionModal) return;
+    this.sessionNameInput.value = '';
+    this.sessionDirInput.value = '';
+    this.createSessionModal.classList.add('visible');
+    this.sessionNameInput.focus();
+  }
+
+  hideCreateSessionModal() {
+    if (!this.createSessionModal) return;
+    this.createSessionModal.classList.remove('visible');
+  }
+
+  async createSession() {
+    const name = this.sessionNameInput.value.trim();
+    const directory = this.sessionDirInput.value.trim();
+
+    try {
+      const result = await this.sessionAPI.createSession({ name, directory });
+      this.hideCreateSessionModal();
+      // Session list will be updated via WebSocket
+      if (result.session) {
+        this.selectSession(result.session.id);
+      }
+    } catch (err) {
+      console.error('Error creating session:', err);
+      alert('Failed to create session: ' + err.message);
+    }
+  }
+
+  async sendPrompt() {
+    if (!this.selectedSessionId || !this.promptInput) return;
+
+    const prompt = this.promptInput.value.trim();
+    if (!prompt) return;
+
+    try {
+      await this.sessionAPI.sendPrompt(this.selectedSessionId, prompt);
+      this.promptInput.value = '';
+    } catch (err) {
+      console.error('Error sending prompt:', err);
+      alert('Failed to send prompt: ' + err.message);
+    }
+  }
+
+  async cancelCurrentSession() {
+    if (!this.selectedSessionId) return;
+
+    try {
+      await this.sessionAPI.cancelSession(this.selectedSessionId);
+    } catch (err) {
+      console.error('Error cancelling session:', err);
+    }
+  }
+
+  async cancelSession(id) {
+    try {
+      await this.sessionAPI.cancelSession(id);
+    } catch (err) {
+      console.error('Error cancelling session:', err);
+    }
+  }
+
+  async restartSession(id) {
+    try {
+      await this.sessionAPI.restartSession(id);
+    } catch (err) {
+      console.error('Error restarting session:', err);
+      alert('Failed to restart session: ' + err.message);
+    }
+  }
+
+  async deleteSession(id) {
+    if (!confirm('Delete this session?')) return;
+
+    try {
+      await this.sessionAPI.deleteSession(id);
+      if (this.selectedSessionId === id) {
+        this.selectedSessionId = null;
+        this.updatePromptBarState();
+      }
+    } catch (err) {
+      console.error('Error deleting session:', err);
+      alert('Failed to delete session: ' + err.message);
+    }
+  }
+
+  // ===== PERMISSION HANDLING =====
+
+  showPermissionModal(sessionId, options) {
+    if (!this.permissionModal) return;
+
+    const session = this.managedSessions.find(s => s.id === sessionId);
+    const sessionName = session ? session.name : sessionId;
+
+    this.permissionText.textContent = `${sessionName} is requesting permission:`;
+    if (options.text) {
+      this.permissionText.textContent += '\n\n' + options.text;
+    }
+
+    this.permissionOptions.innerHTML = '';
+
+    for (const opt of options.options || []) {
+      const btn = document.createElement('button');
+      btn.className = 'btn permission-btn';
+      btn.textContent = `${opt.number}. ${opt.label}`;
+      btn.addEventListener('click', () => {
+        this.sendPermissionResponse(sessionId, opt.number);
+      });
+      this.permissionOptions.appendChild(btn);
+    }
+
+    this.permissionModal.dataset.sessionId = sessionId;
+    this.permissionModal.classList.add('visible');
+  }
+
+  hidePermissionModal() {
+    if (!this.permissionModal) return;
+    this.permissionModal.classList.remove('visible');
+  }
+
+  async sendPermissionResponse(sessionId, response) {
+    try {
+      await this.sessionAPI.sendPermission(sessionId, response);
+      this.hidePermissionModal();
+    } catch (err) {
+      console.error('Error sending permission response:', err);
+    }
+  }
+
+  // ===== UTILITIES =====
+
+  escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  truncatePath(path, maxLen = 30) {
+    if (!path || path.length <= maxLen) return path;
+    return '...' + path.slice(-(maxLen - 3));
   }
 }
 
