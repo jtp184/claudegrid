@@ -23,10 +23,7 @@ SyslogIdentifier=claudegrid
 
 # Security hardening
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
 ReadWritePaths=%INSTALL_DIR%
-
-[Install]
-WantedBy=multi-user.target
+PrivateTmp=no
+ProtectSystem=no
+ProtectHome=no

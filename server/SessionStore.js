@@ -172,7 +172,7 @@ class SessionStore {
     let session = this.observedSessions.get(claudeSessionId);
     if (!session) {
       session = {
-        id: claudeSessionId.slice(0, 8),
+        id: claudeSessionId,
         claudeSessionId,
         name: `Observed ${claudeSessionId.slice(0, 8)}`,
         directory: updates.cwd || null,
