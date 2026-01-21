@@ -418,7 +418,7 @@ class ClaudeGridApp {
       item.innerHTML = `
         <div class="session-info">
           <span class="session-state" style="color: ${stateColors[session.state] || '#446688'}">●</span>
-          <span class="session-name">${this.escapeHtml(session.name)}</span>
+          <span class="session-name">${this.escapeHtml(session.name)} <span class="session-id">(${this.escapeHtml(session.id.slice(0, 8))})</span></span>
           <span class="observed-badge">OBSERVE ONLY</span>
         </div>
         ${session.directory ? `<div class="session-dir">${this.escapeHtml(this.truncatePath(session.directory))}</div>` : ''}
@@ -428,7 +428,7 @@ class ClaudeGridApp {
       item.innerHTML = `
         <div class="session-info">
           <span class="session-state" style="color: ${stateColors[session.state] || '#446688'}">●</span>
-          <span class="session-name">${this.escapeHtml(session.name)}</span>
+          <span class="session-name">${this.escapeHtml(session.name)} <span class="session-id">(${this.escapeHtml(session.id.slice(0, 8))})</span></span>
         </div>
         <div class="session-dir">${this.escapeHtml(this.truncatePath(session.directory))}</div>
         <div class="session-actions">

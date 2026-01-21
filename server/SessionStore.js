@@ -157,10 +157,40 @@ class SessionStore {
     return this.observedSessions.get(claudeSessionId) || null;
   }
 
+  // Normalize directory path for comparison (resolve symlinks and remove trailing slash)
+  normalizePath(dir) {
+    if (!dir) return null;
+    try {
+      // Use realpathSync to resolve symlinks
+      return fs.realpathSync(dir).replace(/\/+$/, '');
+    } catch {
+      // If path doesn't exist or can't be resolved, fall back to path.resolve
+      return path.resolve(dir).replace(/\/+$/, '');
+    }
+  }
+
   // Find managed session by directory that doesn't have a claudeSessionId yet (for auto-linking)
   findUnlinkedByDirectory(directory) {
+    const normalizedDir = this.normalizePath(directory);
+    console.log(`[Link] findUnlinkedByDirectory called with dir=${directory}, normalized=${normalizedDir}, sessionCount=${this.sessions.size}`);
+    if (!normalizedDir) return null;
     for (const session of this.sessions.values()) {
-      if (session.directory === directory && !session.claudeSessionId) {
+      const sessionDir = this.normalizePath(session.directory);
+      const hasClaudeId = !!session.claudeSessionId;
+      console.log(`[Link] Checking session ${session.id.slice(0,8)}: dir=${sessionDir} vs ${normalizedDir}, hasClaudeId=${hasClaudeId}`);
+      if (sessionDir === normalizedDir && !hasClaudeId) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  // Find observed session by directory (for cleanup)
+  findObservedByDirectory(directory) {
+    const normalizedDir = this.normalizePath(directory);
+    if (!normalizedDir) return null;
+    for (const session of this.observedSessions.values()) {
+      if (this.normalizePath(session.directory) === normalizedDir) {
         return session;
       }
     }

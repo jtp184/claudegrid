@@ -172,6 +172,12 @@ body {
     color: #44ddff;
 }
 
+.session-id {
+    font-weight: normal;
+    color: #668899;
+    font-size: 11px;
+}
+
 .session-dir {
     font-size: 10px;
     color: #446688;

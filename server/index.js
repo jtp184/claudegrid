@@ -166,15 +166,23 @@ function createServer() {
       const shortId = require('crypto').randomBytes(4).toString('hex');
       const tmuxSession = `claudegrid-${shortId}`;
 
-      // Create tmux session with Claude
-      await tmux.createSession(tmuxSession, validDir, { continueSession });
-
-      // Store in session manager
+      // Store in session manager FIRST (before tmux starts Claude)
+      // This prevents race condition where hook events arrive before session exists
       const session = sessionStore.create({
         name: name || `Session ${shortId}`,
         directory: validDir,
         tmuxSession
       });
+      console.log(`[Create] Managed session ${session.id.slice(0,8)} created with directory: ${validDir}`);
+
+      try {
+        // Create tmux session with Claude
+        await tmux.createSession(tmuxSession, validDir, { continueSession });
+      } catch (tmuxErr) {
+        // If tmux creation fails, clean up the managed session
+        sessionStore.delete(session.id);
+        throw tmuxErr;
+      }
 
       // Broadcast update
       broadcastSessions();
@@ -251,9 +259,24 @@ function createServer() {
       // Kill tmux session
       await tmux.killSession(session.tmuxSession);
 
-      // Also remove any observed session with the same claudeSessionId
+      // Also remove any observed session with the same claudeSessionId or directory
       if (session.claudeSessionId) {
         sessionStore.removeObserved(session.claudeSessionId);
+      } else if (session.directory) {
+        // If no claudeSessionId was linked, try to find and remove by directory
+        const observed = sessionStore.findObservedByDirectory(session.directory);
+        if (observed) {
+          sessionStore.removeObserved(observed.claudeSessionId);
+        }
+      }
+
+      // Broadcast SessionEnd event so client can despawn the Bit
+      if (session.claudeSessionId) {
+        broadcast({
+          messageType: 'event',
+          session_id: session.claudeSessionId,
+          hook_event_name: 'SessionEnd'
+        });
       }
 
       // Remove from store
@@ -391,12 +414,23 @@ function createServer() {
       let session = sessionStore.findByClaudeSessionId(event.session_id);
       const hookEvent = event.hook_event_name;
 
-      // If no session found by claudeSessionId, try to auto-link by matching cwd
-      if (!session && event.cwd) {
+      // Debug: log linking attempts
+      console.log(`[Event] ${hookEvent} session_id=${event.session_id.slice(0,8)} cwd=${event.cwd || 'none'} found=${session ? (session.observed ? 'observed' : 'managed') : 'none'}`);
+
+      // Try to auto-link to an unlinked managed session by directory
+      // Do this even if we found an observed session - prefer managed sessions
+      if (event.cwd) {
         const managedSession = sessionStore.findUnlinkedByDirectory(event.cwd);
+        console.log(`[Event] findUnlinkedByDirectory(${event.cwd}) => ${managedSession ? managedSession.id.slice(0,8) : 'none'}`);
         if (managedSession) {
           // Link this claude session to the managed session
+          console.log(`[Event] Linking claude session ${event.session_id.slice(0,8)} to managed session ${managedSession.id.slice(0,8)}`);
           sessionStore.linkClaudeSession(event.session_id, managedSession.id);
+          // If there was an observed session, remove it (we're taking over)
+          if (session && session.observed) {
+            console.log(`[Event] Removing observed session ${event.session_id.slice(0,8)}`);
+            sessionStore.removeObserved(event.session_id);
+          }
           session = managedSession;
         }
       }
