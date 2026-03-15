@@ -29,10 +29,11 @@ export class SessionAPI {
   }
 
   // Create a new session
-  async createSession({ name, directory, continueSession = false }) {
+  async createSession({ name, directory, skipPermissions, continueSession = false }) {
     return this.request('POST', '/api/sessions', {
       name,
       directory,
+      skipPermissions,
       continueSession
     });
   }

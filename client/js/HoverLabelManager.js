@@ -109,8 +109,10 @@ export class HoverLabelManager {
 
     // Upper label: managed session name if available, otherwise cwd
     let upperText = null;
+    let isManaged = false;
     if (this.getSessionName) {
       upperText = this.getSessionName(bit.sessionId);
+      isManaged = !!upperText;
     }
     if (!upperText && eventData.cwd) {
       upperText = eventData.cwd;
@@ -118,6 +120,7 @@ export class HoverLabelManager {
 
     if (upperText) {
       this.cwdLabel.textContent = upperText;
+      this.cwdLabel.dataset.managed = isManaged ? 'true' : 'false';
       this.cwdLabel.style.display = 'block';
       this.cwdLabel.style.left = `${x}px`;
       this.cwdLabel.style.top = `${y - 90}px`;

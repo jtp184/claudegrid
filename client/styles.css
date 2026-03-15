@@ -35,30 +35,97 @@ body {
 
 #status {
     display: flex;
-    gap: 20px;
+    gap: 12px;
     font-size: 12px;
     letter-spacing: 2px;
+    align-items: center;
 }
 
-#connection-status {
-    padding: 4px 12px;
-    border-radius: 2px;
+/* Status Badge (combined connection + session count) */
+.status-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 13px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    line-height: 1;
+    text-align: center;
+    text-indent: 0;
+    padding: 0 0 1px 0;
+    transition: all 0.3s;
+    background: rgba(0, 15, 30, 0.95);
 }
 
-#connection-status.connected {
+.status-badge.connected {
     color: #44ff88;
-    background: rgba(68, 255, 136, 0.1);
-    border: 1px solid #44ff88;
+    border: 3px solid #44ff88;
+    text-shadow: 0 0 6px rgba(68, 255, 136, 0.5);
 }
 
-#connection-status.disconnected {
+.status-badge.disconnected {
     color: #ff4444;
-    background: rgba(255, 68, 68, 0.1);
-    border: 1px solid #ff4444;
+    border: 3px solid #ff4444;
+    text-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
 }
 
-#session-count {
-    color: #ffdd44;
+/* Sound Button */
+.sound-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sound-btn:hover .sound-ring {
+    box-shadow: 0 0 8px rgba(68, 221, 255, 0.3);
+}
+
+.sound-ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: conic-gradient(
+        #44ddff calc(var(--volume, 70) * 1%),
+        #223344 calc(var(--volume, 70) * 1%)
+    );
+    transition: all 0.2s;
+    position: relative;
+}
+
+.sound-ring::before {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: rgba(0, 15, 30, 0.95);
+}
+
+.sound-icon {
+    position: relative;
+    font-size: 14px;
+    line-height: 1;
+    color: #44ddff;
+    z-index: 1;
+}
+
+.sound-btn.off .sound-icon {
+    color: #334455;
+}
+
+.sound-btn.off .sound-ring {
+    background: conic-gradient(#334455 100%, #334455 100%);
 }
 
 #main-container {
@@ -66,7 +133,7 @@ body {
     top: 50px;
     left: 0;
     right: 0;
-    bottom: 90px;
+    bottom: 24px;
     display: flex;
     overflow: hidden;
 }
@@ -405,20 +472,85 @@ body {
     word-break: break-all;
 }
 
-/* Prompt Bar */
-#prompt-bar {
+/* Conversation Panel (bottom) */
+#conversation-panel {
     position: fixed;
-    bottom: 50px;
+    bottom: 0;
     left: 0;
     right: 0;
-    height: 40px;
+    height: 300px;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(0deg, rgba(0,20,40,0.95) 0%, rgba(0,10,20,0.9) 100%);
+    border-top: 1px solid #224466;
+    z-index: 100;
+    transition: height 0.3s ease;
+}
+
+#conversation-panel.collapsed {
+    height: 24px;
+}
+
+#conversation-panel.collapsed #conversation-content {
+    display: none;
+}
+
+#conversation-toggle {
+    position: absolute;
+    left: 12px;
+    top: 4px;
+    z-index: 1;
+}
+
+#conversation-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding-top: 24px;
+}
+
+#conversation-output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 20px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    color: #88aacc;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(0, 10, 20, 0.5);
+    border-bottom: 1px solid #224466;
+}
+
+#conversation-output::-webkit-scrollbar {
+    width: 6px;
+}
+
+#conversation-output::-webkit-scrollbar-track {
+    background: #001020;
+}
+
+#conversation-output::-webkit-scrollbar-thumb {
+    background: #224466;
+    border-radius: 3px;
+}
+
+#conversation-output:empty::before {
+    content: 'Select a managed session to view output...';
+    color: #334455;
+    font-style: italic;
+}
+
+/* Prompt Bar (inside conversation panel) */
+#prompt-bar {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 0 20px;
+    padding: 8px 20px;
     background: rgba(0, 15, 30, 0.95);
     border-top: 1px solid #224466;
-    z-index: 100;
+    flex-shrink: 0;
 }
 
 #session-selector {
@@ -493,54 +625,6 @@ body {
     cursor: not-allowed;
 }
 
-/* Controls */
-#controls {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 50px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 20px;
-    background: linear-gradient(0deg, rgba(0,20,40,0.9) 0%, rgba(0,10,20,0.7) 100%);
-    border-top: 1px solid #224466;
-    z-index: 100;
-    transition: height 0.3s ease, padding 0.3s ease;
-    overflow: hidden;
-}
-
-#controls.collapsed {
-    height: 24px;
-}
-
-#controls.collapsed #controls-content {
-    display: none;
-}
-
-#controls-content {
-    display: flex;
-    gap: 20px;
-    align-items: center;
-}
-
-#controls-toggle {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    border: none;
-    background: transparent;
-    padding: 2px 12px;
-}
-
-#controls-toggle:hover {
-    border: none;
-    background: transparent;
-    color: #88eeff;
-}
-
 .btn {
     padding: 10px 24px;
     font-size: 12px;
@@ -574,49 +658,6 @@ body {
 .btn-primary:hover {
     background: rgba(68, 255, 136, 0.2);
     box-shadow: 0 0 10px rgba(68, 255, 136, 0.3);
-}
-
-#volume-control {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-#volume-control label {
-    font-size: 12px;
-    letter-spacing: 2px;
-    color: #446688;
-}
-
-#volume-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 80px;
-    height: 4px;
-    background: #224466;
-    border-radius: 2px;
-    cursor: pointer;
-}
-
-#volume-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 12px;
-    height: 12px;
-    background: #44ddff;
-    border-radius: 50%;
-    cursor: pointer;
-    box-shadow: 0 0 6px rgba(68, 221, 255, 0.5);
-}
-
-#volume-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    background: #44ddff;
-    border-radius: 50%;
-    cursor: pointer;
-    border: none;
-    box-shadow: 0 0 6px rgba(68, 221, 255, 0.5);
 }
 
 .toggle-btn {
@@ -745,7 +786,7 @@ body {
     top: 50px;
     left: 44px;
     right: 44px;
-    bottom: 90px;
+    bottom: 24px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -827,8 +868,19 @@ body {
 }
 
 .hover-label[data-type="cwd"] {
-    color: #668899;
     font-size: 12px;
+}
+
+.hover-label[data-type="cwd"][data-managed="true"] {
+    color: #44ff88;
+    border-color: rgba(68, 255, 136, 0.3);
+    text-shadow: 0 0 5px rgba(68, 255, 136, 0.3);
+}
+
+.hover-label[data-type="cwd"][data-managed="false"] {
+    color: #aa88ff;
+    border-color: rgba(170, 136, 255, 0.3);
+    text-shadow: 0 0 5px rgba(170, 136, 255, 0.3);
 }
 
 .hover-label[data-type="context"] {
@@ -838,16 +890,20 @@ body {
 }
 
 /* Collapsed state adjustments */
-body.controls-collapsed #main-container {
-    bottom: 64px;
-}
-
-body.controls-collapsed #prompt-bar {
+body.conversation-collapsed #main-container {
     bottom: 24px;
 }
 
-body.controls-collapsed #empty-state {
-    bottom: 64px;
+body:not(.conversation-collapsed) #main-container {
+    bottom: 300px;
+}
+
+body.conversation-collapsed #empty-state {
+    bottom: 24px;
+}
+
+body:not(.conversation-collapsed) #empty-state {
+    bottom: 300px;
 }
 
 body.log-collapsed #empty-state {
@@ -978,10 +1034,6 @@ body:not(.log-collapsed) #empty-state {
         font-size: 9px;
     }
 
-    #controls-content {
-        gap: 10px;
-    }
-
     .btn {
         padding: 6px 12px;
         font-size: 10px;
@@ -1007,5 +1059,14 @@ body:not(.log-collapsed) #empty-state {
     .cancel-btn {
         padding: 6px 10px;
         font-size: 10px;
+    }
+
+    .sound-ring {
+        width: 26px;
+        height: 26px;
+    }
+
+    .sound-icon {
+        font-size: 11px;
     }
 }

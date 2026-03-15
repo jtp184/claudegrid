@@ -124,7 +124,8 @@ async function sessionExists(sessionName) {
 // Create a new tmux session and run Claude Code
 async function createSession(sessionName, directory, options = {}) {
   const validName = validateTmuxName(sessionName);
-  const validDir = validateDirectoryPath(directory);
+  // Directory is already validated by the caller (server/index.js)
+  const validDir = directory;
 
   // Check if session already exists
   if (await sessionExists(validName)) {

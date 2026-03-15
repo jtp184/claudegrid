@@ -5,7 +5,7 @@ export class AudioManager {
   static RESPONSE_EVENTS = ['SessionStart', 'PermissionRequest', 'Stop'];
 
   constructor() {
-    this.mode = 'response';
+    this.mode = 'off';
     this.initialized = false;
     this.initializing = false;
     this.synth = null;
@@ -148,5 +148,16 @@ export class AudioManager {
         // Generic blip
         this.synth.triggerAttackRelease('A4', '64n', now);
     }
+  }
+
+  async playErrorBeep() {
+    if (this.mode === 'off') return;
+    if (!this.initialized) {
+      await this.init();
+      if (!this.initialized) return;
+    }
+    const now = this.Tone.now();
+    this.synth.triggerAttackRelease('E3', '32n', now);
+    this.synth.triggerAttackRelease('C3', '32n', now + 0.08);
   }
 }

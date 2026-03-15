@@ -51,23 +51,32 @@ class ClaudeGridApp {
   constructor() {
     this.canvas = document.getElementById('canvas');
     this.logContainer = document.getElementById('log-entries');
-    this.connectionStatus = document.getElementById('connection-status');
-    this.sessionCount = document.getElementById('session-count');
     this.emptyState = document.getElementById('empty-state');
-    this.soundToggle = document.getElementById('sound-toggle');
-    this.volumeSlider = document.getElementById('volume-slider');
-    this.clearLogBtn = document.getElementById('clear-log');
+
+    // Status badge (combined connection + session count)
+    this.statusBadge = document.getElementById('status-badge');
+
+    // Sound button
+    this.soundBtn = document.getElementById('sound-btn');
+    this.soundRing = this.soundBtn.querySelector('.sound-ring');
+    this.soundIcon = this.soundBtn.querySelector('.sound-icon');
+
+    // Event log
     this.logToggle = document.getElementById('log-toggle');
-    this.controlsToggle = document.getElementById('controls-toggle');
     this.eventLogPanel = document.getElementById('event-log');
-    this.controlsPanel = document.getElementById('controls');
+
+    // Conversation panel
+    this.conversationPanel = document.getElementById('conversation-panel');
+    this.conversationToggle = document.getElementById('conversation-toggle');
+    this.conversationOutput = document.getElementById('conversation-output');
+    this.outputPollInterval = null;
+    this._refreshTimeout = null;
 
     // Session control elements
     this.sessionPanel = document.getElementById('session-panel');
     this.sessionList = document.getElementById('session-list');
     this.newSessionBtn = document.getElementById('new-session-btn');
     this.sessionPanelToggle = document.getElementById('session-panel-toggle');
-    this.promptBar = document.getElementById('prompt-bar');
     this.promptInput = document.getElementById('prompt-input');
     this.promptSendBtn = document.getElementById('prompt-send');
     this.sessionSelector = document.getElementById('session-selector');
@@ -105,9 +114,25 @@ class ClaudeGridApp {
     this.maxReconnectAttempts = 10;
     this.reconnectDelay = 1000;
 
+    // Initialize sound button visual state
+    this.updateSoundButtonState();
+
     this.setupEventListeners();
     this.connect();
     this.startRenderLoop();
+  }
+
+  updateSoundButtonState() {
+    const modeIcons = { off: '\u2716', response: '\u26A0', on: '\u266A' };
+    const modeTitles = {
+      off: 'Sound: Off\nClick to enable response sounds',
+      response: 'Sound: Response Only\nPlays on session start, permissions, and stop\nScroll to adjust volume',
+      on: 'Sound: All Events\nPlays on every hook event\nScroll to adjust volume'
+    };
+    this.soundIcon.textContent = modeIcons[this.audioManager.mode];
+    this.soundBtn.title = modeTitles[this.audioManager.mode];
+    this.soundRing.style.setProperty('--volume', Math.round(this.audioManager.volume * 100));
+    this.soundBtn.classList.toggle('off', this.audioManager.mode === 'off');
   }
 
   setupEventListeners() {
@@ -122,40 +147,37 @@ class ClaudeGridApp {
     document.addEventListener('click', initAudioOnce);
     document.addEventListener('keydown', initAudioOnce);
 
-    this.soundToggle.addEventListener('click', async () => {
+    // Sound button: click cycles mode
+    this.soundBtn.addEventListener('click', async () => {
       const mode = this.audioManager.toggle();
-      const modeLabels = { off: 'OFF', response: 'RESPONSE ONLY', on: 'ON' };
-      this.soundToggle.textContent = `SOUND: ${modeLabels[mode]}`;
-      this.soundToggle.classList.toggle('active', mode !== 'off');
-
+      this.updateSoundButtonState();
       if (mode !== 'off') {
-        // Initialize audio on enable (requires user gesture)
         await this.audioManager.init();
       }
     });
 
-    this.volumeSlider.addEventListener('input', () => {
-      const volume = this.volumeSlider.value / 100;
-      this.audioManager.setVolume(volume);
-    });
+    // Sound button: scroll adjusts volume
+    this.soundBtn.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.05 : -0.05;
+      const newVol = Math.max(0, Math.min(1, this.audioManager.volume + delta));
+      this.audioManager.setVolume(newVol);
+      this.soundRing.style.setProperty('--volume', Math.round(newVol * 100));
+    }, { passive: false });
 
-    this.clearLogBtn.addEventListener('click', () => {
-      this.eventLog.clear();
-    });
-
+    // Event log toggle
     this.logToggle.addEventListener('click', () => {
       const isCollapsed = this.eventLogPanel.classList.toggle('collapsed');
       document.body.classList.toggle('log-collapsed', isCollapsed);
       this.logToggle.textContent = isCollapsed ? '>' : '<';
-      // Trigger resize after CSS transition completes (300ms)
       setTimeout(() => this.sessionGrid.onResize(), 300);
     });
 
-    this.controlsToggle.addEventListener('click', () => {
-      const isCollapsed = this.controlsPanel.classList.toggle('collapsed');
-      document.body.classList.toggle('controls-collapsed', isCollapsed);
-      this.controlsToggle.textContent = isCollapsed ? '^' : 'v';
-      // Trigger resize after CSS transition completes (300ms)
+    // Conversation panel toggle
+    this.conversationToggle.addEventListener('click', () => {
+      const isCollapsed = this.conversationPanel.classList.toggle('collapsed');
+      document.body.classList.toggle('conversation-collapsed', isCollapsed);
+      this.conversationToggle.innerHTML = isCollapsed ? '&#8743;' : '&#8744;';
       setTimeout(() => this.sessionGrid.onResize(), 300);
     });
 
@@ -202,6 +224,12 @@ class ClaudeGridApp {
     this.sessionSelector?.addEventListener('change', () => {
       this.selectedSessionId = this.sessionSelector.value || null;
       this.updatePromptBarState();
+      if (this.selectedSessionId) {
+        this.startOutputPolling();
+      } else {
+        this.stopOutputPolling();
+        this.conversationOutput.textContent = '';
+      }
     });
 
     // Close modals on backdrop click
@@ -226,15 +254,15 @@ class ClaudeGridApp {
 
     this.ws.onopen = () => {
       console.log('WebSocket connected');
-      this.connectionStatus.textContent = 'CONNECTED';
-      this.connectionStatus.className = 'connected';
+      this.statusBadge.className = 'status-badge connected';
+      this.updateSessionCount();
       this.reconnectAttempts = 0;
     };
 
     this.ws.onclose = () => {
       console.log('WebSocket disconnected');
-      this.connectionStatus.textContent = 'DISCONNECTED';
-      this.connectionStatus.className = 'disconnected';
+      this.statusBadge.textContent = '\u2715';
+      this.statusBadge.className = 'status-badge disconnected';
       this.scheduleReconnect();
     };
 
@@ -324,6 +352,14 @@ class ClaudeGridApp {
 
     // Always update UI (even if event processing failed)
     this.updateSessionCount();
+
+    // Refresh conversation output if event is for the selected session
+    if (eventData.session_id && this.selectedSessionId) {
+      const selectedSession = this.managedSessions.find(s => s.id === this.selectedSessionId);
+      if (selectedSession && selectedSession.claudeSessionId === eventData.session_id) {
+        this.refreshConversationOutput();
+      }
+    }
   }
 
   playEventSound(eventData) {
@@ -339,7 +375,11 @@ class ClaudeGridApp {
 
   updateSessionCount() {
     const count = this.sessionGrid.getSessionCount();
-    this.sessionCount.textContent = `${count} SESSION${count !== 1 ? 'S' : ''}`;
+
+    // Only update text if connected — show just the number
+    if (this.statusBadge.classList.contains('connected')) {
+      this.statusBadge.textContent = count;
+    }
 
     // Show/hide empty state
     if (count === 0 && this.managedSessions.length === 0) {
@@ -355,6 +395,59 @@ class ClaudeGridApp {
       this.sessionGrid.update();
     };
     animate();
+  }
+
+  // ===== CONVERSATION OUTPUT =====
+
+  startOutputPolling() {
+    this.stopOutputPolling();
+    if (!this.selectedSessionId) return;
+
+    const poll = async () => {
+      if (!this.selectedSessionId) return;
+      const session = this.managedSessions.find(s => s.id === this.selectedSessionId && !s.observed);
+      if (!session) return;
+
+      try {
+        const result = await this.sessionAPI.getOutput(this.selectedSessionId, 200);
+        if (result.output !== undefined) {
+          const wasAtBottom = this.conversationOutput.scrollHeight - this.conversationOutput.scrollTop <= this.conversationOutput.clientHeight + 20;
+          this.conversationOutput.textContent = result.output;
+          if (wasAtBottom) {
+            this.conversationOutput.scrollTop = this.conversationOutput.scrollHeight;
+          }
+        }
+      } catch (err) {
+        // Silently fail -- session may be offline
+      }
+    };
+
+    poll();
+    this.outputPollInterval = setInterval(poll, 3000);
+  }
+
+  stopOutputPolling() {
+    if (this.outputPollInterval) {
+      clearInterval(this.outputPollInterval);
+      this.outputPollInterval = null;
+    }
+  }
+
+  refreshConversationOutput() {
+    if (this._refreshTimeout) clearTimeout(this._refreshTimeout);
+    this._refreshTimeout = setTimeout(async () => {
+      if (!this.selectedSessionId) return;
+      try {
+        const result = await this.sessionAPI.getOutput(this.selectedSessionId, 200);
+        if (result.output !== undefined) {
+          const wasAtBottom = this.conversationOutput.scrollHeight - this.conversationOutput.scrollTop <= this.conversationOutput.clientHeight + 20;
+          this.conversationOutput.textContent = result.output;
+          if (wasAtBottom) {
+            this.conversationOutput.scrollTop = this.conversationOutput.scrollHeight;
+          }
+        }
+      } catch (err) { /* ignore */ }
+    }, 500);
   }
 
   // ===== SESSION MANAGEMENT =====
@@ -502,6 +595,12 @@ class ClaudeGridApp {
     } else {
       this.promptInput.placeholder = 'Select a session first...';
     }
+
+    // Stop polling if no valid session
+    if (!this.selectedSessionId) {
+      this.stopOutputPolling();
+      this.conversationOutput.textContent = '';
+    }
   }
 
   selectSession(id) {
@@ -510,6 +609,7 @@ class ClaudeGridApp {
       this.sessionSelector.value = id;
     }
     this.updatePromptBarState();
+    this.startOutputPolling();
 
     // Highlight selected in list
     document.querySelectorAll('.session-item').forEach(item => {
@@ -605,6 +705,8 @@ class ClaudeGridApp {
       await this.sessionAPI.deleteSession(id);
       if (this.selectedSessionId === id) {
         this.selectedSessionId = null;
+        this.stopOutputPolling();
+        this.conversationOutput.textContent = '';
         this.updatePromptBarState();
       }
     } catch (err) {
@@ -667,10 +769,25 @@ class ClaudeGridApp {
   }
 
   selectSessionByClaudeId(claudeSessionId) {
+    // Check if this is an observed session (no tmux, can't interact)
+    const observedSession = this.managedSessions.find(s => s.claudeSessionId === claudeSessionId && s.observed);
+    if (observedSession) {
+      // Play a short error beep to indicate this bit isn't interactive
+      this.audioManager.playErrorBeep();
+      return;
+    }
+
     // Find managed session with matching claudeSessionId
     const session = this.managedSessions.find(s => s.claudeSessionId === claudeSessionId && !s.observed);
     if (session && session.state !== 'offline') {
       this.selectSession(session.id);
+      // Open the conversation panel
+      if (this.conversationPanel.classList.contains('collapsed')) {
+        this.conversationPanel.classList.remove('collapsed');
+        document.body.classList.remove('conversation-collapsed');
+        this.conversationToggle.innerHTML = '&#8744;';
+        setTimeout(() => this.sessionGrid.onResize(), 300);
+      }
       // Focus prompt input
       if (this.promptInput) {
         this.promptInput.focus();
