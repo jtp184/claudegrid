@@ -47,6 +47,7 @@ class SessionStore {
         for (const session of data) {
           // Mark all sessions as offline on startup - health check will update
           session.state = SessionState.OFFLINE;
+          session.offlineSince = new Date().toISOString();
           this.sessions.set(session.id, session);
         }
         console.log(`Loaded ${this.sessions.size} sessions from disk`);
@@ -82,6 +83,7 @@ class SessionStore {
       tmuxSession,
       state: SessionState.IDLE,
       claudeSessionId: null,
+      offlineSince: null,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString()
     };
@@ -204,7 +206,7 @@ class SessionStore {
       session = {
         id: claudeSessionId,
         claudeSessionId,
-        name: 'Session',
+        name: updates.cwd ? path.basename(updates.cwd) : `Session ${claudeSessionId.slice(0, 8)}`,
         directory: updates.cwd || null,
         tmuxSession: null,
         state: SessionState.WORKING,
@@ -249,9 +251,11 @@ class SessionStore {
 
       if (isActive && wasOffline) {
         session.state = SessionState.IDLE;
+        session.offlineSince = null;
         changed = true;
       } else if (!isActive && wasActive) {
         session.state = SessionState.OFFLINE;
+        session.offlineSince = new Date().toISOString();
         changed = true;
       }
     }

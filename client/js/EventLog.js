@@ -1,3 +1,5 @@
+import { hashCode } from './utils.js';
+
 // EventLog - Activity sidebar
 export class EventLog {
   constructor(containerElement) {
@@ -91,13 +93,7 @@ export class EventLog {
   }
 
   idToColor(id) {
-    // Hash the ID to generate a consistent hue
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-      hash = ((hash << 5) - hash) + id.charCodeAt(i);
-      hash |= 0;
-    }
-    const hue = Math.abs(hash) % 360;
+    const hue = Math.abs(hashCode(id)) % 360;
     return `hsl(${hue}, 70%, 65%)`;
   }
 

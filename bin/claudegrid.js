@@ -8,12 +8,14 @@ const PORT = process.env.CLAUDEGRID_PORT || 3333;
 const server = createServer();
 
 server.listen(PORT, () => {
+  const url = `http://localhost:${PORT}`;
+  const urlPad = ' '.repeat(Math.max(0, 37 - url.length));
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║                      ClaudeGrid                           ║
+║                      ClaudeGrid                          ║
 ║         Claude Code Lifecycle Event Visualizer            ║
 ╠═══════════════════════════════════════════════════════════╣
-║  Server running on http://localhost:${PORT}                  ║
+║  Server running on ${url}${urlPad}║
 ║                                                           ║
 ║  To install Claude Code hooks, run:                       ║
 ║    npx claudegrid --install-hooks                         ║

@@ -53,6 +53,9 @@ async function pollSessions() {
   const sessions = sessionStore.getAll();
 
   for (const session of sessions) {
+    // Skip observed sessions (no tmuxSession to capture from)
+    if (!session.tmuxSession) continue;
+
     // Skip offline sessions
     if (session.state === SessionState.OFFLINE) {
       sentPrompts.delete(session.id);

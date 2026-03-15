@@ -93,6 +93,9 @@ class ClaudeGridApp {
     this.audioManager = new AudioManager();
     this.sessionAPI = new SessionAPI();
 
+    // Skip permissions checkbox
+    this.skipPermissionsCheckbox = document.getElementById('skip-permissions');
+
     // Managed sessions
     this.managedSessions = [];
     this.selectedSessionId = null;
@@ -532,9 +535,16 @@ class ClaudeGridApp {
   async createSession() {
     const name = this.sessionNameInput.value.trim();
     const directory = this.sessionDirInput.value.trim();
+    const skipPermissions = this.skipPermissionsCheckbox ? this.skipPermissionsCheckbox.checked : true;
+
+    // Loading state
+    const btn = this.createSessionConfirm;
+    const originalText = btn.textContent;
+    btn.textContent = 'CREATING...';
+    btn.disabled = true;
 
     try {
-      const result = await this.sessionAPI.createSession({ name, directory });
+      const result = await this.sessionAPI.createSession({ name, directory, skipPermissions });
       this.hideCreateSessionModal();
       // Session list will be updated via WebSocket
       if (result.session) {
@@ -542,7 +552,9 @@ class ClaudeGridApp {
       }
     } catch (err) {
       console.error('Error creating session:', err);
-      alert('Failed to create session: ' + err.message);
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
     }
   }
 
@@ -557,7 +569,6 @@ class ClaudeGridApp {
       this.promptInput.value = '';
     } catch (err) {
       console.error('Error sending prompt:', err);
-      alert('Failed to send prompt: ' + err.message);
     }
   }
 
@@ -584,7 +595,6 @@ class ClaudeGridApp {
       await this.sessionAPI.restartSession(id);
     } catch (err) {
       console.error('Error restarting session:', err);
-      alert('Failed to restart session: ' + err.message);
     }
   }
 
@@ -599,7 +609,6 @@ class ClaudeGridApp {
       }
     } catch (err) {
       console.error('Error deleting session:', err);
-      alert('Failed to delete session: ' + err.message);
     }
   }
 

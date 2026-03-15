@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hashCode } from './utils.js';
 
 // Visual states
 export const States = {
@@ -233,7 +234,7 @@ class ToolBit {
     this.scale = 0.2;
 
     // Use a seeded pseudo-random based on toolUseId for consistency
-    const seed = this.hashCode(toolUseId);
+    const seed = hashCode(toolUseId);
     const rand = (offset) => {
       const x = Math.sin(seed + offset) * 10000;
       return x - Math.floor(x);
@@ -309,16 +310,6 @@ class ToolBit {
     this.group.add(this.edges);
 
     this.group.scale.setScalar(0.01);
-  }
-
-  hashCode(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return hash;
   }
 
   startDespawn() {
@@ -771,9 +762,9 @@ export class BitVisualizer {
       clearTimeout(this.yesRevertTimer);
     }
 
-    this.bitMesh.geometry.dispose();
+    // Don't dispose bitMesh geometry - it comes from shared geometryCache
     this.bitMaterial.dispose();
-    this.bitEdges.geometry.dispose();
+    this.bitEdges.geometry.dispose(); // EdgesGeometry is per-instance, safe to dispose
     this.edgeMaterial.dispose();
 
     if (this.shatterParticles) {

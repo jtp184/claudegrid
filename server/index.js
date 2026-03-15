@@ -5,6 +5,7 @@ const { WebSocketServer } = require('ws');
 const { SessionStore, SessionState } = require('./SessionStore');
 const tmux = require('./tmux');
 
+
 function createServer() {
   const app = express();
   const server = http.createServer(app);
@@ -154,7 +155,7 @@ function createServer() {
   // Create new session
   app.post('/api/sessions', async (req, res) => {
     try {
-      const { name, directory, continueSession } = req.body;
+      const { name, directory, skipPermissions, continueSession } = req.body;
 
       // Validate directory if provided
       let validDir = process.cwd();
@@ -177,7 +178,7 @@ function createServer() {
 
       try {
         // Create tmux session with Claude
-        await tmux.createSession(tmuxSession, validDir, { continueSession });
+        await tmux.createSession(tmuxSession, validDir, { continueSession, skipPermissions });
       } catch (tmuxErr) {
         // If tmux creation fails, clean up the managed session
         sessionStore.delete(session.id);
@@ -420,19 +421,15 @@ function createServer() {
       let session = sessionStore.findByClaudeSessionId(event.session_id);
       const hookEvent = event.hook_event_name;
 
-      // Debug: log linking attempts
       console.log(`[Event] ${hookEvent} session_id=${event.session_id.slice(0,8)} cwd=${event.cwd || 'none'} found=${session ? (session.observed ? 'observed' : 'managed') : 'none'}`);
 
       // Try to auto-link to an unlinked managed session by directory
-      // Do this even if we found an observed session - prefer managed sessions
       if (event.cwd) {
         const managedSession = sessionStore.findUnlinkedByDirectory(event.cwd);
         console.log(`[Event] findUnlinkedByDirectory(${event.cwd}) => ${managedSession ? managedSession.id.slice(0,8) : 'none'}`);
         if (managedSession) {
-          // Link this claude session to the managed session
           console.log(`[Event] Linking claude session ${event.session_id.slice(0,8)} to managed session ${managedSession.id.slice(0,8)}`);
           sessionStore.linkClaudeSession(event.session_id, managedSession.id);
-          // If there was an observed session, remove it (we're taking over)
           if (session && session.observed) {
             console.log(`[Event] Removing observed session ${event.session_id.slice(0,8)}`);
             sessionStore.removeObserved(event.session_id);
@@ -456,11 +453,9 @@ function createServer() {
       } else {
         // Observed session (existing or new)
         if (hookEvent === 'SessionEnd') {
-          // Remove observed session when it ends
           sessionStore.removeObserved(event.session_id);
           broadcastSessions();
         } else {
-          // Upsert observed session with state based on event
           let state = SessionState.WORKING;
           if (hookEvent === 'SessionStart' || hookEvent === 'Stop' || hookEvent === 'SubagentStop') {
             state = SessionState.IDLE;
@@ -488,11 +483,12 @@ function createServer() {
   // Poll tmux sessions every 5 seconds
   async function healthCheck() {
     try {
-      const activeSessions = await tmux.listSessions();
+      const activeSessions = await tmux.refreshSessionCache();
       const changed = sessionStore.updateHealthStatus(activeSessions);
       if (changed) {
         broadcastSessions();
       }
+
     } catch (err) {
       console.error('Health check error:', err.message);
     }
@@ -504,7 +500,6 @@ function createServer() {
   healthCheck();
 
   // ===== PERMISSION DETECTION =====
-  // Import and start permission detector
   let permissionDetector;
   try {
     permissionDetector = require('./permissionDetector');

@@ -60,8 +60,39 @@ function tmuxExec(args) {
   });
 }
 
-// List all tmux sessions
-async function listSessions() {
+// Session list cache
+let cachedSessionList = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 2000; // ms
+
+// Invalidate session cache (call after mutations)
+function invalidateSessionCache() {
+  cachedSessionList = null;
+  cacheTimestamp = 0;
+}
+
+// List all tmux sessions (cached)
+async function listSessionsCached() {
+  const now = Date.now();
+  if (cachedSessionList && (now - cacheTimestamp) < CACHE_TTL) {
+    return cachedSessionList;
+  }
+  const result = await listSessionsUncached();
+  cachedSessionList = result;
+  cacheTimestamp = now;
+  return result;
+}
+
+// Refresh session cache proactively (for health checks)
+async function refreshSessionCache() {
+  const result = await listSessionsUncached();
+  cachedSessionList = result;
+  cacheTimestamp = Date.now();
+  return result;
+}
+
+// List all tmux sessions (uncached, internal)
+async function listSessionsUncached() {
   try {
     const output = await tmuxExec(['list-sessions', '-F', '#{session_name}']);
     return output.split('\n').filter(Boolean);
@@ -79,9 +110,14 @@ async function listSessions() {
   }
 }
 
+// List all tmux sessions (public API, uses cache)
+async function listSessions() {
+  return listSessionsCached();
+}
+
 // Check if tmux session exists
 async function sessionExists(sessionName) {
-  const sessions = await listSessions();
+  const sessions = await listSessionsCached();
   return sessions.includes(sessionName);
 }
 
@@ -110,7 +146,11 @@ async function createSession(sessionName, directory, options = {}) {
   }
 
   // Build claude command arguments
-  const claudeArgs = ['--dangerously-skip-permissions'];
+  const claudeArgs = [];
+  // Default to skipping permissions for backward compat
+  if (options.skipPermissions !== false) {
+    claudeArgs.push('--dangerously-skip-permissions');
+  }
   if (options.continueSession) {
     claudeArgs.push('--continue');
   }
@@ -130,6 +170,9 @@ async function createSession(sessionName, directory, options = {}) {
 
   // Wait for shell to fully initialize
   await new Promise(resolve => setTimeout(resolve, 300));
+
+  // Invalidate cache after creating session
+  invalidateSessionCache();
 
   // Now send the claude command to the session
   const claudeCmd = `${claudeBin} ${claudeArgs.join(' ')}`;
@@ -206,6 +249,7 @@ async function killSession(sessionName) {
   }
 
   await tmuxExec(['kill-session', '-t', validName]);
+  invalidateSessionCache();
   return true;
 }
 
@@ -231,6 +275,8 @@ module.exports = {
   validateTmuxName,
   validateDirectoryPath,
   listSessions,
+  refreshSessionCache,
+  invalidateSessionCache,
   sessionExists,
   createSession,
   sendToTmuxSafe,

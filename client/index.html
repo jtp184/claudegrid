@@ -81,6 +81,12 @@
                 <label for="session-directory">Working Directory</label>
                 <input type="text" id="session-directory" placeholder="/path/to/project">
             </div>
+            <div class="form-group form-group-inline">
+                <label for="skip-permissions">
+                    <input type="checkbox" id="skip-permissions" checked>
+                    Skip permissions (--dangerously-skip-permissions)
+                </label>
+            </div>
             <div class="modal-actions">
                 <button id="create-session-cancel" class="btn">CANCEL</button>
                 <button id="create-session-confirm" class="btn btn-primary">CREATE</button>

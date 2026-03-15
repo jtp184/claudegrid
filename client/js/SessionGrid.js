@@ -356,33 +356,32 @@ export class SessionGrid {
   }
 
   initFromSessions(sessions) {
-    // Preserve existing sessions on reconnect - server is stateless and sends
-    // empty init. A future enhancement could add explicit session expiry.
-    if (sessions.length === 0 && this.sessions.size > 0) {
-      return;
-    }
-
-    // Clear existing
-    for (const session of this.sessions.values()) {
-      this.scene.remove(session.bit.group);
-      session.bit.dispose();
-    }
-    this.sessions.clear();
-
-    // Create from tree structure (if server sends state)
+    // Build set of server-known session IDs
+    // Managed sessions use claudeSessionId (UUID), observed use id (which equals claudeSessionId)
+    const serverIds = new Set();
     for (const session of sessions) {
-      const bit = this.createSession(session.id);
+      const key = session.claudeSessionId || session.id;
+      serverIds.add(key);
+    }
 
-      if (session.state && session.state !== 'neutral') {
-        bit.hasWorked = true;
+    // Remove client Bits not in server set
+    const toRemove = [];
+    for (const sessionId of this.sessions.keys()) {
+      if (!serverIds.has(sessionId)) {
+        toRemove.push(sessionId);
       }
+    }
+    for (const id of toRemove) {
+      this.removeSession(id);
+    }
 
-      if (session.subagents) {
-        for (const subagent of session.subagents) {
-          const subBit = this.createSession(subagent.id, session.id);
-          if (subagent.state && subagent.state !== 'neutral') {
-            subBit.hasWorked = true;
-          }
+    // Create Bits for server sessions not in client
+    for (const session of sessions) {
+      const key = session.claudeSessionId || session.id;
+      if (!this.sessions.has(key)) {
+        const bit = this.createSession(key);
+        if (session.state && session.state !== 'neutral') {
+          bit.hasWorked = true;
         }
       }
     }
