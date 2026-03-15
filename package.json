@@ -15,7 +15,8 @@
     "daemon:start": "sudo systemctl start claudegrid",
     "daemon:stop": "sudo systemctl stop claudegrid",
     "daemon:restart": "sudo systemctl restart claudegrid",
-    "daemon:logs": "journalctl -u claudegrid -f"
+    "daemon:logs": "journalctl -u claudegrid -f",
+    "screenshot": "node scripts/screenshot.js"
   },
   "keywords": [
     "claude",
@@ -29,5 +30,8 @@
   "dependencies": {
     "express": "^4.18.2",
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.2"
   }
 }
